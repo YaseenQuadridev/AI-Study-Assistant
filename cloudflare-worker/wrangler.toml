@@ -1,0 +1,10 @@
+name = "adaptive-study-planner-api"
+main = "worker.js"
+compatibility_date = "2026-06-26"
+
+[env.production]
+name = "adaptive-study-planner-api"
+
+# Deploy with: wrangler deploy
+# Requires: npm install -g wrangler
+# Login: wrangler login

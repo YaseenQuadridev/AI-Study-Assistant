@@ -22,6 +22,10 @@ python scoring_test/flask_app.py
 
 # Phase 1: Streamlit Dashboard
 streamlit run scoring_test/dashboard.py
+
+# Phase 3: Frontend (Supabase-backed)
+# Open frontend/index.html in browser or serve with any static server
+python -m http.server 8080 --directory frontend
 ```
 
 ---
@@ -86,33 +90,59 @@ adaptive-study-planner/
 │   ├── knowledge/         # Docling, chunking, FAISS
 │   ├── reasoning/         # RAG engine
 │   └── rendering/         # Text, HTML, slides, quiz, audio
+├── frontend/              # Phase 3 standalone SPA (Supabase auth)
+│   ├── index.html
+│   └── phase3-app.js
+├── cloudflare-worker/     # Phase 3 API gateway
+│   ├── worker.js
+│   └── wrangler.toml
 ├── tests/
 │   └── test_core.py
 ├── requirements.txt
 ├── Dockerfile
 ├── docker-compose.yml
-└── .env.example
+├── .env.example
+├── SECURITY.md
+├── ENGINEERING_REVIEW.md
+└── INDEPENDENT_REVIEW.md
 ```
 
 ---
 
-## Infrastructure
+## Phase 3 Infrastructure
 
-| Phase | Target | Status |
-|-------|--------|--------|
-| Phase 1 | Local / JSON file | ✅ Built |
-| Phase 2 | FAISS vector store (local) | ✅ Built |
-| Phase 3 | Supabase PostgreSQL + pgvector | ✅ Schema created |
-| Phase 3 | Cloudflare R2 | 🔄 Enable in dashboard |
+| Component | Provider | Status | URL |
+|-----------|----------|--------|-----|
+| Database | Supabase PostgreSQL + pgvector | ✅ Ready | `blowpaeftobvczysekrr.supabase.co` |
+| Edge Function | Supabase Edge Functions | ✅ Deployed | `/functions/v1/process-document` |
+| API Gateway | Cloudflare Worker | 📝 Code ready | Deploy with `wrangler deploy` |
+| Object Storage | Cloudflare R2 | 🔄 Enable in dashboard | `ff42f7b54f53ec415f8d196d19501f32` |
+| Auth | Supabase Auth | ✅ Built-in | Email/Password + OAuth |
+| Frontend | Static HTML/JS | ✅ Built | `frontend/index.html` |
 
-**Environment variables:**
-- `FLASK_DEBUG` — set `true` for local dev only
-- `CORS_ORIGINS` — comma-separated allowed origins (default `*` for dev)
-- `RATE_LIMIT_WINDOW` — seconds per window (default 60)
-- `RATE_LIMIT_MAX` — requests per window (default 30)
+---
 
-**Supabase Project:** `blowpaeftobvczysekrr`
-**Cloudflare Account:** `ff42f7b54f53ec415f8d196d19501f32`
+## Environment Variables
+
+```bash
+# Phase 1 / 2
+FLASK_DEBUG=false              # true for local dev only
+FLASK_PORT=5000
+CORS_ORIGINS=*                 # comma-separated for production
+RATE_LIMIT_WINDOW=60
+RATE_LIMIT_MAX=30
+
+# Phase 3 (Supabase)
+SUPABASE_URL=https://blowpaeftobvczysekrr.supabase.co
+SUPABASE_KEY=sb_publishable_ZhJf8u6YjuDewlJp1tTfJw_p7eu8NpH
+
+# AI Providers (optional — local defaults require no keys)
+# OPENAI_API_KEY=sk-...
+# ELEVENLABS_API_KEY=...
+
+# Ollama (local default)
+OLLAMA_BASE_URL=http://localhost:11434
+```
 
 ---
 
