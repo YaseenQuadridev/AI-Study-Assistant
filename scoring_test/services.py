@@ -5,6 +5,7 @@ import json
 import os
 import tempfile
 import threading
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -12,7 +13,17 @@ from scorer import compute_score, classify_priority
 
 DEFAULT_STATE_PATH = Path(__file__).with_name("state.json")
 TIME_CAP_MINUTES = 180
-_state_lock = threading.Lock()
+_state_lock = threading.RLock()
+
+
+@contextmanager
+def state_transaction(path=None):
+    """Acquire lock, load state, yield, save state. Skips save on exception."""
+    path = path or DEFAULT_STATE_PATH
+    with _state_lock:
+        state = load_app_state(path)
+        yield state
+        save_app_state(state, path)
 
 
 def load_app_state(path: Path | None = None) -> dict[str, Any]:

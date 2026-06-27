@@ -5,6 +5,7 @@ import os
 import threading
 import time
 from collections import defaultdict
+from contextlib import contextmanager
 from typing import Any
 
 from flask import Flask, jsonify, render_template, request
@@ -19,6 +20,7 @@ from services import (
     log_detailed_performance,
     log_study_session,
     save_app_state,
+    state_transaction,
 )
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
@@ -27,7 +29,7 @@ app = Flask(__name__, template_folder="templates", static_folder="static")
 _cors_origins = os.environ.get("CORS_ORIGINS", "*")
 if _cors_origins != "*":
     _cors_origins = [o.strip() for o in _cors_origins.split(",")]
-CORS(app, resources={r"/api/*": {"origins": _cors_origins}})
+CORS(app, origins=_cors_origins)
 
 # In-memory per-IP rate limiter (simple, no external deps)
 _RATE_LIMIT_WINDOW = int(os.environ.get("RATE_LIMIT_WINDOW", "60"))
@@ -73,8 +75,8 @@ def get_topics():
 @app.route("/add-topic", methods=["POST"])
 def api_add_topic():
     payload = request.get_json(force=True) or {}
-    name = (payload.get("name") or "").strip()
-    subject = (payload.get("subject") or "").strip()
+    name = str(payload.get("name") or "").strip()
+    subject = str(payload.get("subject") or "").strip()
     if not name:
         return envelope(False, error="Topic name required"), 400
 
@@ -86,16 +88,18 @@ def api_add_topic():
     except (ValueError, TypeError):
         return envelope(False, error="D, P, U must be valid numbers"), 400
 
-    state = load_app_state()
-    topic = add_topic(state, subject or "General", name, d_val, p_val, u_val)
-    save_app_state(state)
+    try:
+        with state_transaction() as state:
+            topic = add_topic(state, subject or "General", name, d_val, p_val, u_val)
+    except ValueError as e:
+        return envelope(False, error=str(e)), 400
     return envelope(True, topic)
 
 
 @app.route("/log", methods=["POST"])
 def api_log():
     payload = request.get_json(force=True) or {}
-    name = payload.get("topic_name") or payload.get("name")
+    name = str(payload.get("topic_name") or payload.get("name") or "").strip()
     if not name:
         return envelope(False, error="topic_name required"), 400
 
@@ -103,19 +107,18 @@ def api_log():
     studied = bool(payload.get("studied_today", True))
     mistake = bool(payload.get("made_mistake", False))
 
-    state = load_app_state()
     try:
-        log_study_session(state, name, studied, mistake)
+        with state_transaction() as state:
+            log_study_session(state, name, studied, mistake)
     except ValueError as e:
         return envelope(False, error=str(e)), 400
-    save_app_state(state)
     return envelope(True, {"message": "Logged"})
 
 
 @app.route("/log-detailed", methods=["POST"])
 def api_log_detailed():
     payload = request.get_json(force=True) or {}
-    name = payload.get("topic_name") or payload.get("name")
+    name = str(payload.get("topic_name") or payload.get("name") or "").strip()
     if not name:
         return envelope(False, error="topic_name required"), 400
 
@@ -128,12 +131,11 @@ def api_log_detailed():
     except (KeyError, ValueError, TypeError) as e:
         return envelope(False, error=f"Invalid payload: {e}"), 400
 
-    state = load_app_state()
     try:
-        log_detailed_performance(state, name, accuracy, recall, time_taken, expected)
+        with state_transaction() as state:
+            log_detailed_performance(state, name, accuracy, recall, time_taken, expected)
     except ValueError as e:
         return envelope(False, error=str(e)), 400
-    save_app_state(state)
     return envelope(True, {"message": "Logged detailed"})
 
 
@@ -146,10 +148,10 @@ def api_plan():
 
 @app.route("/advance", methods=["POST"])
 def api_advance():
-    state = load_app_state()
-    advance_day(state)
-    save_app_state(state)
-    return envelope(True, {"current_day": state["current_day"]})
+    with state_transaction() as state:
+        advance_day(state)
+        current_day = state["current_day"]
+    return envelope(True, {"current_day": current_day})
 
 
 @app.route("/health")
