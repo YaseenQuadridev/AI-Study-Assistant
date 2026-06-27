@@ -1,0 +1,43 @@
+{
+  "topics": [
+    {
+      "name": "Calculus",
+      "subject": "Mathematics",
+      "D": 0.8,
+      "P": 0.9,
+      "U": 0.5,
+      "S": 0.0,
+      "mistakes": 0,
+      "last_studied": null,
+      "last_feedback": null,
+      "performance_history": []
+    },
+    {
+      "name": "Probability",
+      "subject": "Mathematics",
+      "D": 0.6,
+      "P": 0.7,
+      "U": 0.6,
+      "S": 0.0,
+      "mistakes": 0,
+      "last_studied": null,
+      "last_feedback": null,
+      "performance_history": []
+    },
+    {
+      "name": "Linear Algebra",
+      "subject": "Mathematics",
+      "D": 0.7,
+      "P": 0.8,
+      "U": 0.4,
+      "S": 0.0,
+      "mistakes": 0,
+      "last_studied": null,
+      "last_feedback": null,
+      "performance_history": []
+    }
+  ],
+  "current_day": 1,
+  "performance_history": [],
+  "revision_tasks": []
+}
