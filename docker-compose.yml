@@ -1,0 +1,20 @@
+name: adaptive-study-planner
+services:
+  app:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - APP_ENV=production
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+    volumes:
+      - ./data:/app/data
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+volumes:
+  ollama:

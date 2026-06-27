@@ -4,8 +4,6 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
-import requests
-
 
 class LLMProvider(ABC):
     @abstractmethod
@@ -23,6 +21,7 @@ class OllamaLLMProvider(LLMProvider):
         self.default_model = default_model
 
     def generate(self, prompt: str, model: str | None = None, temperature: float = 0.7) -> str:
+        import requests
         r = requests.post(
             f"{self.base_url}/api/generate",
             json={"model": model or self.default_model, "prompt": prompt, "stream": False, "options": {"temperature": temperature}},
@@ -32,6 +31,7 @@ class OllamaLLMProvider(LLMProvider):
         return r.json().get("response", "").strip()
 
     def chat(self, messages: list[dict[str, str]], model: str | None = None, temperature: float = 0.7) -> str:
+        import requests
         r = requests.post(
             f"{self.base_url}/api/chat",
             json={"model": model or self.default_model, "messages": messages, "stream": False, "options": {"temperature": temperature}},
@@ -54,6 +54,7 @@ class OpenAILLMProvider(LLMProvider):
         return self.chat([{"role": "user", "content": prompt}], model, temperature)
 
     def chat(self, messages: list[dict[str, str]], model: str | None = None, temperature: float = 0.7) -> str:
+        import requests
         r = requests.post(
             f"{self.base_url}/chat/completions",
             headers=self._headers(),

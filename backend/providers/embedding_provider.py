@@ -4,8 +4,6 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
-import numpy as np
-
 
 class EmbeddingProvider(ABC):
     @abstractmethod
@@ -32,6 +30,7 @@ class BAAIEmbeddingProvider(EmbeddingProvider):
                 raise RuntimeError(f"Failed to load BAAI model: {e}")
 
     def embed(self, texts: list[str]) -> list[list[float]]:
+        import numpy as np
         self._load()
         vectors = self._model.encode(texts, convert_to_numpy=True, normalize_embeddings=True)
         return vectors.tolist()
