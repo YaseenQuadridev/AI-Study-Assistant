@@ -65,8 +65,9 @@ def trend_analysis(state: dict[str, Any]) -> dict[str, Any]:
     hist = state.get("performance_history", [])
     if not hist:
         return {"days": [], "mistakes": [], "time_spent": [], "message": "Study more to see trends."}
-    required = {"day", "mistakes", "time_taken"}
-    if not required.issubset(hist[0].keys()):
+    # Records written by log_detailed_performance have: accuracy, recall_quality, time_taken, expected_time, day, topic
+    # We only need 'day' and 'time_taken'; 'mistakes' is optional and defaults to 0.
+    if "day" not in hist[0]:
         return {"days": [], "mistakes": [], "time_spent": [], "message": "History data incomplete"}
     days = sorted({int(h["day"]) for h in hist})
     by_day = {}

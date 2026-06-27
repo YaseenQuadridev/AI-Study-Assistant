@@ -1,10 +1,7 @@
-"""knowledge/vector_store.py — FAISS-based vector store with persistence."""
+"""knowledge/vector_store.py — FAISS-based vector store with persistence (JSON metadata)."""
 from __future__ import annotations
 
 import json
-import os
-import pickle
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -69,8 +66,8 @@ class VectorStore:
             import faiss
             faiss.write_index(self._index, str(path.with_suffix(".faiss")))
         meta = {"chunks": self._chunks, "id_map": self._id_map, "dim": self.dim}
-        with open(path.with_suffix(".meta"), "wb") as f:
-            pickle.dump(meta, f)
+        with open(path.with_suffix(".meta.json"), "w", encoding="utf-8") as f:
+            json.dump(meta, f, indent=2, ensure_ascii=False)
 
     def load(self, path: Path | str | None = None) -> None:
         path = Path(path) if path else self.index_path
@@ -78,8 +75,15 @@ class VectorStore:
             return
         import faiss
         self._index = faiss.read_index(str(path.with_suffix(".faiss")))
-        with open(path.with_suffix(".meta"), "rb") as f:
-            meta = pickle.load(f)
+        meta_path = path.with_suffix(".meta.json")
+        if meta_path.exists():
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+        else:
+            # Fallback for legacy pickle files
+            import pickle
+            with open(path.with_suffix(".meta"), "rb") as f:
+                meta = pickle.load(f)
         self._chunks = meta["chunks"]
         self._id_map = meta["id_map"]
         self.dim = meta.get("dim", self.dim)

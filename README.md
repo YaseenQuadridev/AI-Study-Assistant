@@ -100,10 +100,16 @@ adaptive-study-planner/
 
 | Phase | Target | Status |
 |-------|--------|--------|
-| Phase 1 | Local / JSON | ✅ Built |
-| Phase 2 | SQLite + FAISS | ✅ Built |
-| Phase 3 | **Supabase PostgreSQL + pgvector** | ✅ Schema created |
-| Phase 3 | **Cloudflare R2** | 🔄 Enable in dashboard |
+| Phase 1 | Local / JSON file | ✅ Built |
+| Phase 2 | FAISS vector store (local) | ✅ Built |
+| Phase 3 | Supabase PostgreSQL + pgvector | ✅ Schema created |
+| Phase 3 | Cloudflare R2 | 🔄 Enable in dashboard |
+
+**Environment variables:**
+- `FLASK_DEBUG` — set `true` for local dev only
+- `CORS_ORIGINS` — comma-separated allowed origins (default `*` for dev)
+- `RATE_LIMIT_WINDOW` — seconds per window (default 60)
+- `RATE_LIMIT_MAX` — requests per window (default 30)
 
 **Supabase Project:** `blowpaeftobvczysekrr`
 **Cloudflare Account:** `ff42f7b54f53ec415f8d196d19501f32`

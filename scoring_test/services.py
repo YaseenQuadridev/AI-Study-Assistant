@@ -1,9 +1,10 @@
-"""services.py — State management, planning, enrichment, logging."""
+"""services.py — State management, planning, enrichment, logging (with locking)."""
 from __future__ import annotations
 
 import json
 import os
 import tempfile
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -11,17 +12,19 @@ from scorer import compute_score, classify_priority
 
 DEFAULT_STATE_PATH = Path(__file__).with_name("state.json")
 TIME_CAP_MINUTES = 180
+_state_lock = threading.Lock()
 
 
 def load_app_state(path: Path | None = None) -> dict[str, Any]:
     path = path or DEFAULT_STATE_PATH
-    if not path.exists():
-        return default_state()
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except (json.JSONDecodeError, OSError):
-        return default_state()
+    with _state_lock:
+        if not path.exists():
+            return default_state()
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return default_state()
     # backward-compat defaults
     data.setdefault("topics", [])
     data.setdefault("current_day", 1)
@@ -31,12 +34,13 @@ def load_app_state(path: Path | None = None) -> dict[str, Any]:
 
 
 def save_app_state(state, path=None):
-    """Atomic JSON write."""
+    """Atomic JSON write with process-level locking."""
     path = path or DEFAULT_STATE_PATH
-    tmp = tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8", dir=str(path.parent))
-    json.dump(state, tmp, indent=2, ensure_ascii=False)
-    tmp.close()
-    os.replace(tmp.name, str(path))
+    with _state_lock:
+        tmp = tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8", dir=str(path.parent))
+        json.dump(state, tmp, indent=2, ensure_ascii=False)
+        tmp.close()
+        os.replace(tmp.name, str(path))
 
 
 def default_state() -> dict[str, Any]:

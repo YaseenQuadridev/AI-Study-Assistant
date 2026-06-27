@@ -5,6 +5,14 @@ async function post(url, body){ const r=await fetch(API+url,{method:'POST',heade
 function el(id){ return document.getElementById(id); }
 function setStatus(id, msg, ok=true){ const s=el(id); s.textContent=msg; s.className='status '+(ok?'ok':'err'); }
 
+function clearChildren(node){ while(node.firstChild){ node.removeChild(node.firstChild); } }
+function makeEl(tag, cls, text){
+  const e=document.createElement(tag);
+  if(cls) e.className=cls;
+  if(text!==undefined) e.textContent=text;
+  return e;
+}
+
 async function loadMetrics(){
   const m = await get('/metrics');
   if(!m.ok) return;
@@ -19,9 +27,15 @@ async function loadMetrics(){
 
 async function populateTopics(){
   const r = await get('/topics');
-  const sel = el('sel-topic'); sel.innerHTML='<option value="">Select topic</option>';
+  const sel = el('sel-topic');
+  clearChildren(sel);
+  sel.appendChild(makeEl('option','','Select topic')).value='';
   if(r.ok && r.data){
-    r.data.forEach(t=>{ const o=document.createElement('option'); o.value=t.name; o.textContent=t.name; sel.appendChild(o); });
+    r.data.forEach(t=>{
+      const o=makeEl('option','',t.name);
+      o.value=t.name;
+      sel.appendChild(o);
+    });
   }
 }
 
@@ -49,19 +63,34 @@ async function logSession(){
 async function generatePlan(){
   const r = await get('/plan');
   const out = el('plan-out');
-  if(!r.ok){ out.innerHTML='<div class="status err">'+r.error+'</div>'; return; }
+  clearChildren(out);
+  if(!r.ok){
+    const err=makeEl('div','status err',r.error||'Failed');
+    out.appendChild(err);
+    return;
+  }
   const d = r.data;
-  if(!d.plan.length){ out.innerHTML='<p>No plan available yet.</p>'; return; }
-  let html = '';
+  if(!d.plan.length){
+    out.appendChild(makeEl('p','','No plan available yet.'));
+    return;
+  }
   d.plan.forEach((item, idx)=>{
     const t=item.topic;
-    html += '<div class="plan-item '+(idx===0?'focus':'')+'">';
-    html += '<div class="name">'+(idx+1)+'. '+t.name+' <span class="pill '+t.priority+'">'+t.priority+'</span></div>';
-    html += '<div class="meta">Score '+t.score+' | Memory '+t.memory_strength+' | '+item.estimated_minutes+' min | '+t.reasons.join(', ')+'</div>';
-    html += '</div>';
+    const wrap=makeEl('div','plan-item'+(idx===0?' focus':''));
+    const name=makeEl('div','name');
+    name.textContent=(idx+1)+'. '+t.name+' ';
+    const pill=makeEl('span','pill '+t.priority,t.priority);
+    name.appendChild(pill);
+    wrap.appendChild(name);
+    const meta=makeEl('div','meta');
+    meta.textContent='Score '+t.score+' | Memory '+t.memory_strength+' | '+item.estimated_minutes+' min | '+t.reasons.join(', ');
+    wrap.appendChild(meta);
+    out.appendChild(wrap);
   });
-  html += '<div style="margin-top:8px;font-size:13px;color:#94a3b8">Total: '+d.total_minutes+' min'+ (d.overflow_count?' | Overflow: '+d.overflow_count+' topics':'') +'</div>';
-  out.innerHTML = html;
+  const total=makeEl('div','');
+  total.style.cssText='margin-top:8px;font-size:13px;color:#94a3b8';
+  total.textContent='Total: '+d.total_minutes+' min'+ (d.overflow_count?' | Overflow: '+d.overflow_count+' topics':'');
+  out.appendChild(total);
   setStatus('s-plan','Plan generated.');
 }
 
