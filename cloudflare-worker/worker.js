@@ -1,4 +1,4 @@
-// Cloudflare Worker — Adaptive Study Planner API Gateway (Phase 3)
+// Cloudflare Worker — Adaptive Study Planner API Gateway (Phase 4)
 // Deploy with: wrangler deploy
 
 const SUPABASE_URL = 'https://blowpaeftobvczysekrr.supabase.co';
@@ -21,7 +21,7 @@ export default {
 
     // Health check
     if (path === '/health') {
-      return jsonResponse({ status: 'ok', version: '3.0.0', phase: '3' });
+      return jsonResponse({ status: 'ok', version: '4.0.0', phase: '4' });
     }
 
     // Edge Function proxy: /edge/process-document

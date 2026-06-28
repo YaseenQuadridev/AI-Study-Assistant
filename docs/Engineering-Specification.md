@@ -2,582 +2,756 @@
 
 ## Universal Knowledge Ingestion & AI Knowledge Layer
 
-**Version:** 1.0.0
-**Date:** 2026-06-26
-**Status:** Draft — Ready for Review
-**Author:** Engineering Architecture Team
+**Version:** 2.1.0
+**Date:** 2026-06-27
+**Status:** Approved — Phase 4 Enterprise Active
+**Product:** Adaptive Study Planner v4.1.0-ENTERPRISE
+**Author:** Engineering Team
 
 ---
 
-## 1. System Architecture
+## 1. Technology Stack
 
-### 1.1 High-Level Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                              CLIENT LAYER                                │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐  │
-│  │  Web App    │  │  Mobile PWA │  │  CLI Tool   │  │  LMS LTI Plugin │  │
-│  │ (React/Vue) │  │  (Capacitor)│  │  (Python)   │  │  (JavaScript)   │  │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └────────┬────────┘  │
-└─────────┼────────────────┼────────────────┼─────────────────┼──────────┘
-          │                │                │                 │
-          └────────────────┴────────────────┴─────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           API GATEWAY LAYER                              │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │  Cloudflare Worker (Edge)                                         │   │
-│  │  - CORS proxy                                                     │   │
-│  │  - Rate limiting                                                  │   │
-│  │  - Auth token validation (JWT)                                  │   │
-│  │  - Route to services                                              │   │
-│  │  - Cache static responses (Cache API)                             │   │
-│  └─────────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         SERVICE LAYER (Serverless)                     │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌─────────────┐  │
-│  │ Upload       │  │ Processing   │  │ Retrieval    │  │ AI          │  │
-│  │ Service      │  │ Pipeline     │  │ Service      │  │ Orchestrator│  │
-│  │ (Edge Func)  │  │ (Edge Func)  │  │ (Edge Func)  │  │ (Edge Func) │  │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └──────┬──────┘  │
-│         │                 │                 │                 │         │
-│         │                 │                 │                 │         │
-│  ┌──────▼──────┐  ┌───────▼──────┐  ┌──────▼──────┐  ┌──────▼──────┐  │
-│  │ Document    │  │ Chunking     │  │ Vector       │  │ LLMProvider  │  │
-│  │ Validation  │  │ Service      │  │ Search       │  │ Interface   │  │
-│  │ (Edge Func) │  │ (Edge Func)  │  │ (Edge Func)  │  │ (Edge Func) │  │
-│  └─────────────┘  └──────────────┘  └──────────────┘  └─────────────┘  │
-└─────────────────────────────────────────────────────────────────────────┘
-          │                 │                 │                 │
-          └─────────────────┴─────────────────┴─────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                          DATA & STORAGE LAYER                            │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐  │
-│  │ Object      │  │ PostgreSQL  │  │ pgvector    │  │ Cache           │  │
-│  │ Storage     │  │ (Metadata)  │  │ (Embeddings)│  │ (Redis/Upstash) │  │
-│  │ (R2)        │  │ (Supabase)  │  │ (Supabase)  │  │ (Cloudflare)    │  │
-│  │             │  │             │  │             │  │                 │  │
-│  │ Raw PDFs    │  │ Documents   │  │ Chunk       │  │ Session state   │  │
-│  │ Images      │  │ Chunks      │  │ embeddings  │  │ Search results  │  │
-│  │ Videos      │  │ Topics      │  │             │  │ Rate limit      │  │
-│  │             │  │ Users       │  │             │  │                 │  │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────────┘  │
-│  ┌─────────────────────────────────────────────────────────────────────┐  │
-│  │ ArangoDB (Optional Phase 4) — Knowledge Graph                      │  │
-│  │  - Concept nodes, prerequisite edges, related-concept edges          │  │
-│  └─────────────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         EXTERNAL SERVICES LAYER                          │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
-│  │ Docling     │  │ Tesseract   │  │ BAAI/BGE    │  │ vLLM/SGLang │    │
-│  │ (Parser)    │  │ (OCR)       │  │ (Embeddings)│  │ (Inference) │    │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘    │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
-│  │ MathPix     │  │ Google      │  │ OpenAI      │  │ Stripe      │    │
-│  │ (Formulas)  │  │ Vision      │  │ (Optional)  │  │ (Billing)   │    │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘    │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-### 1.2 Architecture Principles
-
-1. **Edge-First**: Process as close to the user as possible. Cloudflare Workers handle auth, caching, and routing at 300+ edge locations.
-2. **Serverless**: Supabase Edge Functions for stateless processing. No server management.
-3. **Event-Driven**: Document upload triggers processing pipeline via webhooks.
-4. **Local-First Defaults**: BAAI/BGE (local), Ollama (local), Kokoro (local). Cloud AI only for optional paid tiers.
-5. **Immutable Storage**: Raw documents never modified. All processing creates derived data in PostgreSQL.
-6. **Multi-Tenant Isolation**: RLS policies enforce strict tenant boundaries. No cross-tenant data leakage possible.
+| Layer | Technology | Purpose |
+|-------|------------|---------|
+| Frontend | Vanilla JavaScript + Tailwind CSS | UI, PWA |
+| Backend API | Cloudflare Workers | API gateway, rate limiting, CORS |
+| AI Orchestration | Supabase Edge Functions | AI pipeline, document processing |
+| Database | Supabase PostgreSQL + pgvector | Data persistence, vector search |
+| Cache | Upstash Redis (or self-hosted Redis) | Rate limiting, JWT blacklist, query cache, embedding cache |
+| Object Storage | Cloudflare R2 (primary) | Document storage |
+| Backup | Cloudflare R2 (cross-region) + Telegram (optional cold) | Disaster recovery |
+| AI Inference | Ollama (local) / vLLM (cloud) / OpenAI (optional) | LLM, embeddings, reranking |
+| OCR | Tesseract 5.x (local) / Google Vision (pro) | Text extraction |
+| Formula OCR | MathPix (pro) | LaTeX conversion |
+| Authentication | Supabase Auth (JWT) | User management |
+| Monitoring | Sentry + Grafana | Error tracking, metrics |
+| **CI/CD** | **GitHub Actions** | **Lint, test, security scan, deploy** |
+| **IaC** | **Terraform / Cloudflare Wrangler** | **Infrastructure as code** |
+| **Tracing** | **OpenTelemetry + Jaeger** | **Distributed tracing** |
+| **Log Storage** | **S3 Glacier / R2** | **Cold log archival** |
 
 ---
 
 ## 2. Component Architecture
 
-### 2.1 Upload Service (Supabase Edge Function)
+### 2.1 Upload Service
 
-**Responsibility:** Accept file uploads, validate, store in R2, trigger processing pipeline.
+```
++-----------------------------------+
+|         Upload Service            |
++-----------------------------------+
+|  +-----------------------------+  |
+|  | FileValidator               |  |
+|  | - magic numbers             |  |
+|  | - size limits               |  |
+|  | - virus scan (ClamAV)       |  |
+|  +-----------------------------+  |
+|  +-----------------------------+  |
+|  | DuplicateDetector           |  |
+|  | - SHA-256 hash              |  |
+|  | - perceptual hash (pHash)   |  |
+|  +-----------------------------+  |
+|  +-----------------------------+  |
+|  | ChunkedUploader             |  |
+|  | - 5MB chunks                |  |
+|  | - resume support            |  |
+|  | - parallel upload           |  |
+|  +-----------------------------+  |
+|  +-----------------------------+  |
+|  | R2Uploader                  |  |
+|  | - presigned URLs            |  |
+|  | - multipart upload          |  |
+|  +-----------------------------+  |
++-----------------------------------+
+         |           |          |
+    R2   |     PostgreSQL   |   Redis
+```
 
 **API:**
-```
-POST /upload
-  Content-Type: multipart/form-data
-  Body: file[] (multiple files), metadata: { exam_id, subject, tags }
-  Response: { upload_id, status, files: [{ filename, size, status, document_id }] }
-```
-
-**Components:**
-- `FileValidator`: checks magic numbers, max size, virus scan
-- `R2Uploader`: streams to Cloudflare R2 (S3-compatible)
-- `MetadataExtractor`: filename, size, MIME type, page count (PDF)
-- `DuplicateDetector`: content hash (SHA-256) + perceptual hash (pHash)
-- `Trigger`: POST to Processing Pipeline webhook
-
-**Error Handling:**
-- Invalid file: 400 with detailed error
-- Virus detected: 400 with scan report
-- Upload too large: 413 with size info
-- R2 failure: 500, retry 3x with exponential backoff
-
-### 2.2 Processing Pipeline (Supabase Edge Function)
-
-**Responsibility:** Orchestrate document processing: OCR → extraction → chunking → embedding → indexing.
-
-**Pipeline Stages:**
-```
-Stage 1: OCR & Text Extraction
-  Input:  raw document (R2 URL)
-  Output: structured markdown, extracted images, detected language
-  Tools:  Docling (primary), Tesseract (fallback), MathPix (formulas)
-  
-Stage 2: Semantic Chunking
-  Input:  structured markdown
-  Output: chunks with metadata (heading, page, topic, subject)
-  Rules:  respect headings, never split tables/formulas, 300-800 tokens
-  
-Stage 3: Knowledge Extraction
-  Input:  chunks
-  Output: concepts, definitions, formulas, question banks, prerequisites
-  Tools:  LLM (Ollama/vLLM) with structured output (JSON schema)
-  
-Stage 4: Embedding Generation
-  Input:  chunks
-  Output: 1024-dimensional vectors (BAAI/BGE)
-  Batch:  32 chunks per batch
-  
-Stage 5: Indexing
-  Input:  chunks + embeddings + metadata
-  Output: pgvector records, full-text index, metadata index
-  
-Stage 6: Knowledge Graph Construction
-  Input:  extracted concepts + prerequisites
-  Output: graph nodes and edges in ArangoDB (or PostgreSQL graph tables)
-```
+- `POST /api/v3/upload` — Multi-file upload, returns upload_id
+- `POST /api/v3/upload/chunk` — Chunked upload (5MB segments), returns chunk_id
+- `GET /api/v3/upload/:id/progress` — Upload progress percentage
+- `GET /api/v3/upload/:id/status` — Upload status (pending, uploading, complete, error)
 
 **State Machine:**
 ```
-[uploaded] → [validating] → [extracting] → [chunking] → [embedding] → [indexing] → [ready]
-                ↓                ↓              ↓            ↓            ↓
-              [error]        [error]        [error]      [error]      [error]
+PENDING → UPLOADING → VALIDATING → SCANNING → COMPLETE
+  |           |          |          |         |
+  +----------->+---------->+---------->+         |
+  |           |          |          |         |
+  +-- ERROR (dead letter queue) <---+         |
 ```
 
-**Retry Logic:**
-- Transient failures (network, rate limit): retry 3x with 2^N * 1s delay
-- Permanent failures (corrupted file, unsupported format): move to dead letter queue
-- Dead letter queue: admin UI for manual review and reprocessing
+### 2.2 Document Validation Service
 
-### 2.3 Retrieval Service (Supabase Edge Function)
+**Responsibilities:**
+- File type validation (magic numbers via python-magic)
+- File size validation (per-file and per-batch limits)
+- Virus scanning (ClamAV daemon or cloud-native)
+- File integrity check (corruption detection)
+- Encoding detection (chardet / charset-normalizer)
+- Language detection (langdetect / fastText for 10+ languages)
+- Password-protected file detection and rejection
+- Executable content detection (embedded in PDFs)
 
-**Responsibility:** Hybrid retrieval from vector + keyword + metadata + graph.
+**Validation Rules:**
+| Check | Action on Failure | Retry |
+|-------|-------------------|-------|
+| Magic number mismatch | Reject with error code | No |
+| Size > 100MB | Reject with error code | No |
+| Virus detected | Quarantine, notify user | No |
+| Corrupted file | Reject, suggest re-upload | No |
+| Password protected | Reject, request unlocked copy | No |
+| Unknown encoding | Process as UTF-8 with warning | No |
+| Low confidence language | Process with default (English) | No |
 
-**API:**
+### 2.3 OCR Service
+
+**Multi-Engine Strategy:**
 ```
-POST /retrieve
-  Body: { query, filters: { subject, document_ids, date_range, confidence_min }, k: 5 }
-  Response: { results: [{ chunk, score, source, confidence, citation }] }
-```
-
-**Components:**
-- `QueryPreprocessor`: spell correction, synonym expansion, query rewriting
-- `DenseRetriever`: vector similarity search via pgvector (top-10)
-- `SparseRetriever`: full-text BM25 search via PostgreSQL tsvector (top-10)
-- `MetadataFilter`: SQL WHERE clause on subject, document, confidence, date
-- `GraphTraverser`: follow prerequisite edges, related concepts (ArangoDB)
-- `ReRanker`: cross-encoder (BAAI/bge-reranker) on combined candidates
-- `FusionEngine`: Reciprocal Rank Fusion (RRF) to merge all scores
-- `CitationFormatter`: format [1], [2] with source document + page
-
-**Caching:**
-- Cache frequent queries in Upstash Redis (1-hour TTL)
-- Cache key: hash(query + filters) → results
-- Cache invalidation: on document reprocessing
-
-### 2.4 AI Orchestrator (Supabase Edge Function)
-
-**Responsibility:** Generate AI responses grounded in retrieved knowledge.
-
-**API:**
-```
-POST /ask
-  Body: { question, context: { restrict_documents, restrict_topics, max_sources: 5 } }
-  Response: { answer, citations: [{ index, source, page, confidence, snippet }] }
-```
-
-**Pipeline:**
-```
-1. Receive question
-2. Call Retrieval Service with question + context filters
-3. Format retrieved chunks as context string
-4. Build prompt: "Answer using ONLY the following context. Cite sources [n]. If insufficient, say 'I don't have enough information.'"
-5. Call LLMProvider (Ollama/vLLM/OpenAI)
-6. Parse response, extract citations
-7. Verify citations match retrieved chunks
-8. Return answer + structured citations
-```
-
-**Prompt Template:**
-```
-You are a helpful study assistant. Use ONLY the context below to answer the question.
-If the context doesn't contain the answer, say "I don't have enough information in your knowledge base."
-
-Context:
-{context}
-
-Question: {question}
-
-Answer (cite sources with [n] format):
+Document Upload
+  |
+  +---> Is it an image/scanned PDF?
+  |       |
+  |       YES
+  |       |
+  |       +---> Tesseract 5.x (primary, free, local)
+  |       |     |
+  |       |     +---> Confidence > 85%? → Success
+  |       |     |
+  |       |     +---> Confidence 60-85%? → Flag warning
+  |       |     |
+  |       |     +---> Confidence < 60%? → Try Google Vision
+  |       |           |
+  |       |           +---> Pro tier? → Google Vision
+  |       |           |     |
+  |       |           |     +---> Success or Manual Review
+  |       |           |
+  |       |           +---> Free tier? → Manual Review
+  |       |
+  |       +---> Contains formulas?
+  |             |
+  |             +---> MathPix (pro tier) → LaTeX
+  |             |
+  |             +---> Free tier? → Tesseract formula mode
+  |       |
+  |       NO (digital PDF) → Skip OCR, go to Parsing
 ```
 
-### 2.5 Document Management Service
+**OCR Engines:**
+| Engine | Use Case | Accuracy | Cost | Availability |
+|--------|----------|----------|------|-------------|
+| Tesseract 5.x | Printed text, 100+ languages | > 85% | Free | Always |
+| Google Vision | Handwriting, poor scans | > 70% | $1.50/1K pages | Pro tier |
+| MathPix | Formulas, LaTeX | > 80% | $0.02/formula | Pro tier |
+| Custom (future) | Diagrams, tables | TBD | TBD | Phase 4 |
 
-**Responsibility:** CRUD operations for user documents.
+### 2.4 Document Processing Service
 
-**API Endpoints:**
+**Responsibilities:**
+- PDF parsing (Docling → structured Markdown)
+- DOCX parsing (python-docx)
+- PPTX parsing (python-pptx)
+- EPUB parsing (ebooklib)
+- Image extraction (PIL, extract embedded images)
+- Table extraction (detect structure, convert to Markdown tables)
+- Formula extraction (preserve LaTeX, detect inline/display math)
+- Diagram extraction (detect diagrams, extract as SVG with captions)
+- Text cleaning (remove headers, footers, watermarks, normalize whitespace)
+- Structure preservation (headings, lists, paragraphs, citations)
+
+**Parsing Pipeline:**
 ```
-GET    /documents          → list user documents with status
-GET    /documents/:id      → get document metadata + processing status
-DELETE /documents/:id      → soft delete (flag + 30-day grace period)
-PUT    /documents/:id      → update metadata (tags, name)
-POST   /documents/:id/reprocess → re-trigger processing pipeline
-GET    /documents/:id/download → download original file from R2
+Input: Validated document
+  |
+  +---> Docling Parser (PDF/DOCX/PPTX/EPUB)
+  |     |
+  |     +---> Structured Markdown output
+  |     |
+  |     +---> Heading hierarchy (h1, h2, h3)
+  |     |
+  |     +---> Table structures (rows, columns, headers)
+  |     |
+  |     +---> Formula annotations (LaTeX blocks)
+  |     |
+  |     +---> Image locations (page, coordinates)
+  |
+  +---> Text Cleaner
+  |     |
+  |     +---> Remove headers/footers (regex patterns)
+  |     |
+  |     +---> Remove watermarks (repeated text detection)
+  |     |
+  |     +---> Normalize whitespace (collapse multiple spaces)
+  |     |
+  |     +---> Preserve citations (author-date, numeric)
+  |
+  +---> Output: Clean Markdown with metadata
 ```
 
-### 2.6 Knowledge Base Service
+### 2.5 Knowledge Extraction Service
 
-**Responsibility:** Query and visualize the user's knowledge base.
+**Extracts from parsed documents:**
+- Topics (subject classification, heading hierarchy)
+- Chapters (heading-level 1/2/3 detection)
+- Concepts (key terms + definitions via LLM)
+- Definitions (concept explanations)
+- Learning objectives (inferred from chapter summaries)
+- Formulae (LaTeX expressions, detected via regex + LLM)
+- Examples (worked problems, case studies)
+- Questions (MCQ, fill-in-blank, short answer from PYQs)
+- Difficulty (formula density, language complexity, question structure)
+- Prerequisites (topic dependency chains via LLM)
+- Metadata (author, publisher, edition, page count, source type)
 
-**API Endpoints:**
+**Extraction Prompts:**
+| Extraction Type | LLM Prompt | Output Format |
+|-----------------|------------|---------------|
+| Concepts | "Extract key concepts and definitions from this text" | JSON array: [{"concept", "definition", "confidence"}] |
+| Formulas | "Detect all mathematical formulas and convert to LaTeX" | JSON array: [{"formula", "latex", "context"}] |
+| Questions | "Extract all questions (MCQ, fill-in-blank, short answer)" | JSON array: [{"type", "question", "answer", "options"}] |
+| Prerequisites | "What topics must a student know before understanding this?" | JSON array: [{"prerequisite", "confidence"}] |
+| Difficulty | "Rate the difficulty of this content from 1-5" | JSON: {"score", "reasoning"} |
+
+### 2.6 Semantic Chunking Service
+
+**Chunking Rules:**
+1. Primary boundary: Document headings (h1, h2, h3)
+2. Secondary boundary: Paragraphs (separated by blank lines)
+3. Never split: Tables, code blocks, formulas, lists
+4. Chunk size: 300-800 tokens (target 500)
+5. Overlap: 80 tokens between consecutive chunks
+6. Metadata per chunk: heading, page number, document ID, topic, subject, chunk level
+7. Parent/child relationships: document → chapter → section → paragraph
+8. Adaptive size: dense content (formulas) → smaller chunks; prose → larger chunks
+
+**Chunk Hierarchy:**
 ```
-GET /knowledge/topics              → topic hierarchy tree
-GET /knowledge/concepts            → flat list of extracted concepts
-GET /knowledge/graph               → nodes and edges for visualization
-GET /knowledge/search?q=...        → full-text + semantic search
-GET /knowledge/summary/:topic_id → AI-generated summary of topic
+document_id
+  |
+  +---> chunk_level_1 (chapter)
+  |       |
+  |       +---> chunk_level_2 (section)
+  |       |       |
+  |       |       +---> chunk_level_3 (paragraph)
+  |       |       |       |
+  |       |       |       +---> chunk_level_4 (sub-paragraph)
 ```
 
-### 2.7 Generation Service
+### 2.7 Embedding Service
 
-**Responsibility:** Generate learning materials from knowledge base.
+**Model Configuration:**
+- Default: BAAI/bge-large-en-v1.5 (1024-dim, free, local)
+- Optional: OpenAI text-embedding-3-small (1536-dim, paid, cloud)
+- Batch size: 32 chunks
+- Normalization: L2 (for cosine similarity via inner product)
+- Device: CPU (default), CUDA (optional)
+- Cache: Redis (24h TTL, key = SHA-256 of chunk text)
+- Incremental: only re-embed changed chunks
 
-**API Endpoints:**
+**Embedding Pipeline:**
 ```
-POST /generate/flashcards  → { topic_id, count: 20 } → flashcards[]
-POST /generate/quiz        → { topic_id, count: 10, type: "mcq" } → questions[]
-POST /generate/summary     → { document_ids } → summary text
-POST /generate/plan        → { exam_id, subjects, days_until_exam } → study plan
+Clean Chunks
+  |
+  +---> Check Redis Cache (SHA-256 key)
+  |     |
+  |     +---> Cache hit? → Return cached embedding
+  |     |
+  |     +---> Cache miss? → Generate embedding
+  |
+  +---> Batch Processor (32 chunks per batch)
+  |     |
+  |     +---> BAAI/BGE (default, local)
+  |     |
+  |     +---> OpenAI (optional, pro tier)
+  |
+  +---> L2 Normalization
+  |
+  +---> Store in pgvector
+  |
+  +---> Update Redis Cache
+```
+
+### 2.8 Knowledge Graph Service
+
+**Graph Schema (PostgreSQL):**
+```sql
+CREATE TABLE knowledge_edges (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    source_node TEXT NOT NULL,
+    target_node TEXT NOT NULL,
+    relationship TEXT NOT NULL CHECK (relationship IN ('prerequisite', 'related', 'part-of', 'covers', 'example-of')),
+    confidence REAL NOT NULL DEFAULT 0.5,
+    source_document_id UUID REFERENCES documents(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id, source_node, target_node, relationship)
+);
+```
+
+**Graph Traversal (PostgreSQL recursive CTE):**
+```sql
+WITH RECURSIVE prerequisites AS (
+    SELECT target_node AS concept, 1 AS depth
+    FROM knowledge_edges
+    WHERE source_node = 'Thermodynamics' 
+      AND relationship = 'prerequisite'
+      AND user_id = '...'
+    
+    UNION ALL
+    
+    SELECT e.target_node, p.depth + 1
+    FROM knowledge_edges e
+    JOIN prerequisites p ON e.source_node = p.concept
+    WHERE e.relationship = 'prerequisite'
+      AND e.user_id = '...'
+      AND p.depth < 5
+)
+SELECT * FROM prerequisites;
+```
+
+**Graph Traversal (ArangoDB - Phase 4):**
+```aql
+FOR v, e, p IN 1..5 OUTBOUND 'concepts/Thermodynamics' GRAPH 'knowledge_graph'
+  FILTER e.relationship == 'prerequisite'
+  RETURN {concept: v.name, depth: LENGTH(p.edges), confidence: e.confidence}
+```
+
+### 2.9 Hybrid Retrieval Engine
+
+**Architecture:**
+```
+User Query
+  |
+  +---> Intent Detection (classify: definition, problem, comparison, summary)
+  |     |
+  |     +---> Definition query → Dense + Graph
+  |     +---> Problem query → Sparse + Metadata
+  |     +---> Comparison query → Dense + Sparse + Graph
+  |     +---> Summary query → Dense + Metadata
+  |
+  +---> Query Planning (select strategy based on intent)
+  |
+  +---> Parallel Retrieval (fork-join)
+  |     |
+  |     +---> Dense Retrieval (pgvector, top 10)
+  |     |     |
+  |     |     +---> SELECT * FROM chunks
+  |     |           ORDER BY embedding <-> query_embedding
+  |     |           LIMIT 10;
+  |     |
+  |     +---> Sparse Retrieval (BM25, top 10)
+  |     |     |
+  |     |     +---> SELECT * FROM chunks
+  |     |           WHERE text_search @@ to_tsquery('english', query)
+  |     |           ORDER BY ts_rank(text_search, query) DESC
+  |     |           LIMIT 10;
+  |     |
+  |     +---> Graph Traversal (prerequisites, top 5)
+  |     |     |
+  |     |     +---> Recursive CTE on knowledge_edges
+  |     |           WHERE source_node = query_concept
+  |     |           LIMIT 5;
+  |     |
+  |     +---> Metadata Filtering (pre-filter)
+  |           |
+  |           +---> WHERE subject = 'Physics' 
+  |                 AND confidence > 0.7
+  |                 AND created_at > '2024-01-01'
+  |
+  +---> Combine Results (deduplicate, merge scores)
+  |
+  +---> Re-ranking (BAAI/bge-reranker, cross-encoder)
+  |     |
+  |     +---> Score each candidate 0-1
+  |
+  +---> Source Ranking (boost by confidence)
+  |     |
+  |     +---> Official sources: ×1.5
+  |     +---> Publisher sources: ×1.2
+  |     +---> Community sources: ×0.8
+  |
+  +---> Reciprocal Rank Fusion (RRF, k=60)
+  |     |
+  |     +---> score = Σ(1 / (k + rank_i))
+  |
+  +---> Final Output: Top 5 chunks with citations
+```
+
+**Latency Targets:**
+| Stage | Target | Max |
+|-------|--------|-----|
+| Intent Detection | 10ms | 20ms |
+| Dense Retrieval | 50ms | 100ms |
+| Sparse Retrieval | 30ms | 50ms |
+| Metadata Filtering | 20ms | 30ms |
+| Graph Traversal | 50ms | 100ms |
+| Re-ranking | 50ms | 100ms |
+| Source Ranking | 10ms | 20ms |
+| RRF Fusion | 5ms | 10ms |
+| **Total** | **225ms** | **430ms** |
+| **Cache Hit** | **50ms** | **100ms** |
+
+### 2.10 Citation Service
+
+**Responsibilities:**
+- Extract citation markers [1], [2] from LLM output
+- Verify each citation against retrieved chunks
+- Format citations with source name, page, confidence
+- Handle missing citations (flag as invented)
+- Generate evidence trace (claim → chunk → document → page → confidence)
+- Produce citation summary table per response
+
+**Citation Format:**
+```
+[1] Physics Textbook, Chapter 3, Page 42, Confidence: 0.92
+[2] NCERT Class 12, Page 156, Confidence: 0.88
+[3] User Class Notes, Page 5, Confidence: 0.65
+```
+
+**Verification Algorithm:**
+```python
+def verify_citations(response, retrieved_chunks):
+    citations = re.findall(r'\[(\d+)\]', response)
+    verified = []
+    for citation in citations:
+        idx = int(citation) - 1  # [1] → index 0
+        if 0 <= idx < len(retrieved_chunks):
+            verified.append({
+                "index": citation,
+                "chunk_id": retrieved_chunks[idx].id,
+                "verified": True,
+                "confidence": retrieved_chunks[idx].confidence
+            })
+        else:
+            verified.append({
+                "index": citation,
+                "verified": False,
+                "flag": "INVENTED_CITATION"
+            })
+    return verified
 ```
 
 ---
 
 ## 3. Data Flow
 
-### 3.1 Upload & Process Flow
+### 3.1 Document Upload & Processing Flow
 
 ```
-User drops PDF into web app
-  │
-  ▼
-Web App → POST /upload (multipart/form-data, JWT token)
-  │
-  ▼
-Cloudflare Worker validates JWT, checks rate limit
-  │
-  ▼
-Supabase Edge Function (Upload Service):
-  1. Validate file (magic number, size, virus scan)
-  2. Generate SHA-256 content hash
-  3. Check for duplicates (hash match)
-  4. Stream to R2: users/{user_id}/documents/{document_id}/original.pdf
-  5. Insert document record into PostgreSQL (status: "uploaded")
-  6. Trigger Processing Pipeline (async webhook)
-  7. Return 202 Accepted with upload_id
-  │
-  ▼
-Processing Pipeline (Supabase Edge Function):
-  Stage 1: Download from R2 → Docling → structured markdown
-  Stage 2: Chunk markdown → metadata-enriched chunks
-  Stage 3: LLM extraction → concepts, formulas, questions
-  Stage 4: Batch embed chunks → BAAI/BGE → vectors
-  Stage 5: Insert chunks + embeddings into pgvector
-  Stage 6: Insert concepts + relationships into knowledge graph
-  Stage 7: Update document record (status: "ready")
-  │
-  ▼
-Web App polls GET /documents/:id/status
-  │
-  ▼
-When status = "ready", show user: "Processing complete! 47 topics extracted."
+User (Browser)
+  | POST /api/v3/upload (multipart, JWT)
+  v
+Cloudflare Worker
+  | Validate JWT, rate limit
+  v
+Upload Service
+  | Validate file (magic, size, virus)
+  | Check duplicates (SHA-256, pHash)
+  | Stream to R2: users/{uid}/docs/{id}/original.pdf
+  | Insert document record (status: "uploaded")
+  v
+Processing Pipeline (async, Supabase Edge Function)
+  | Stage 1: Validation → Virus Scan → Encoding → Language
+  | Stage 2: OCR (if scanned) → Text Extraction
+  | Stage 3: Parsing (Docling) → Structured Markdown
+  | Stage 4: Cleaning (headers, footers, watermarks)
+  | Stage 5: Metadata Extraction (topics, chapters, concepts, formulas, questions)
+  | Stage 6: Difficulty Classification
+  | Stage 7: Duplicate Removal (across documents)
+  | Stage 8: Semantic Chunking (heading-aware, 300-800 tokens, 80 overlap)
+  | Stage 9: Embedding (BAAI/BGE, 1024-dim, batch 32)
+  | Stage 10: Knowledge Graph Construction (concepts → prerequisites → edges)
+  | Stage 11: Vector Index (pgvector IVFFlat / HNSW)
+  | Stage 12: Full-Text Index (PostgreSQL GIN tsvector)
+  | Stage 13: Metadata Index (document properties, tags, status)
+  | Stage 14: Status = "ready"
+  v
+PostgreSQL (update document status)
+  | WebSocket push to client
+  v
+User (Browser)
+  | Sees "Processing complete! X topics, Y concepts, Z formulas"
 ```
 
-### 3.2 Question & Answer Flow
+### 3.2 Q&A Flow (Grounded AI)
 
 ```
-User asks: "What is the ideal gas law?"
-  │
-  ▼
-Web App → POST /ask (question, filters: { restrict_to: "Chemistry Textbook" })
-  │
-  ▼
-Cloudflare Worker validates JWT, rate limit
-  │
-  ▼
-AI Orchestrator:
-  1. Preprocess query: "ideal gas law chemistry"
-  2. Call Retrieval Service:
-     a. Dense: vector search "ideal gas law" → top 10 chunks
-     b. Sparse: BM25 "ideal gas law" → top 10 chunks
-     c. Metadata: filter by document_id = "Chemistry Textbook"
-     d. Graph: traverse from "Thermodynamics" → related concepts
-     e. Re-rank: BAAI/bge-reranker on combined 20 candidates
-     f. RRF fusion → top 5 results
-  3. Format context: "[1] Page 45: The ideal gas law states PV = nRT..."
-  4. Build prompt with context + question
-  5. Call LLMProvider.generate(prompt, temperature=0.3)
-  6. LLM returns: "The ideal gas law is PV = nRT [1], where P is pressure..."
-  7. Verify citation [1] exists in retrieved chunks
-  8. Return { answer, citations: [{ index: 1, source: "Chemistry Textbook", page: 45, confidence: 0.95 }] }
-  │
-  ▼
-Web App renders answer with clickable citations
+User (Browser)
+  | POST /api/v3/ask (question, filters, JWT)
+  v
+Cloudflare Worker
+  | Validate JWT, rate limit
+  v
+Hybrid Retrieval Engine
+  | Intent Detection (query type)
+  | Query Planning (strategy selection)
+  | Dense Retrieval (pgvector, top 10)
+  | Sparse Retrieval (BM25, top 10)
+  | Metadata Filtering (subject, document, confidence)
+  | Graph Traversal (prerequisites, related)
+  | Re-ranking (BAAI/bge-reranker)
+  | Source Ranking (confidence boost)
+  | RRF Fusion (top 5)
+  v
+Context Builder
+  | Assemble top 5 chunks with citations
+  | Format: "Context: [1] ... [2] ... [3] ..."
+  v
+LLM (Ollama / vLLM / OpenAI)
+  | Prompt: "Answer using ONLY the context below. Cite [n]. ..."
+  | Temperature: 0.3
+  | Generate response
+  v
+Citation Service
+  | Extract [1], [2] from LLM output
+  | Verify each against retrieved chunks
+  | Flag invented citations
+  | Format evidence trace
+  v
+PostgreSQL (log query, retrieval, response, verification)
+  v
+User (Browser)
+  | Sees: AI response + citations [1], [2] + confidence scores
+```
+
+### 3.3 Zero-Upload Auto-Setup Flow
+
+```
+User (Browser)
+  | POST /api/v3/setup/auto (exam, board, country, subjects, year, JWT)
+  v
+Cloudflare Worker
+  | Validate JWT, rate limit
+  v
+Web Resource Collector
+  | Query exam database (100+ exams)
+  | Search official websites (polite, rate-limited)
+  | Search DuckDuckGo/Google (fallback)
+  | Rank resources by source confidence
+  v
+PostgreSQL (store found_resources, status: "pending_approval")
+  v
+User (Browser)
+  | GET /api/v3/setup/resources
+  | Sees: ranked list of resources with confidence scores
+  | Approves/rejects each resource
+  v
+Cloudflare Worker
+  | POST /api/v3/setup/approve (resource_ids)
+  v
+Processing Pipeline
+  | Download approved resources
+  | Validate, OCR, Parse, Extract, Chunk, Embed, Index
+  v
+PostgreSQL (status: "ready")
+  v
+User (Browser)
+  | Sees: "Auto-setup complete! X resources imported."
+```
+
+### 3.4 Knowledge Graph Query Flow
+
+```
+User (Browser)
+  | GET /api/v3/knowledge/graph?subject=Physics
+  v
+Cloudflare Worker
+  | Validate JWT
+  v
+Knowledge Graph Service
+  | Query nodes: SELECT * FROM concepts WHERE user_id = ... AND subject = 'Physics'
+  | Query edges: SELECT * FROM knowledge_edges WHERE user_id = ...
+  | Traverse prerequisite chains (recursive CTE, max depth 5)
+  | Calculate learning path optimization (shortest path)
+  | Detect concept gaps (missing prerequisites for target topics)
+  v
+PostgreSQL
+  v
+User (Browser)
+  | Sees: Interactive graph (D3.js/Cytoscape.js)
+  | Nodes: concepts, topics, formulas
+  | Edges: prerequisites, related, part-of
+  | Clickable: definition, source, confidence
 ```
 
 ---
 
-## 4. Service Interactions
+## 4. API Specification
 
-### 4.1 Synchronous Interactions
+### New Endpoints (v4.1.0)
 
-| From | To | Purpose | Timeout |
-|------|-----|---------|---------|
-| Client | Cloudflare Worker | Auth, routing, caching | 5s |
-| Cloudflare Worker | Supabase Edge Function | API request | 30s |
-| Edge Function | PostgreSQL | CRUD operations | 5s |
-| Edge Function | pgvector | Vector search | 2s |
-| Edge Function | R2 | File upload/download | 30s |
-| Edge Function | Redis | Cache read/write | 100ms |
+| Endpoint | Method | Auth | Description | Rate Limit |
+|----------|--------|------|-------------|----------|
+| `/api/v3/upload` | POST | JWT | Multi-file upload | 100/min |
+| `/api/v3/upload/chunk` | POST | JWT | Chunked upload (5MB) | 100/min |
+| `/api/v3/upload/:id/progress` | GET | JWT | Upload progress | 100/min |
+| `/api/v3/documents` | GET | JWT | List user documents | 100/min |
+| `/api/v3/documents/:id` | GET | JWT | Document metadata | 100/min |
+| `/api/v3/documents/:id/reprocess` | POST | JWT | Re-trigger pipeline | 10/min |
+| `/api/v3/documents/:id/download` | GET | JWT | Download original | 50/min |
+| `/api/v3/documents/:id/chunks` | GET | JWT | List chunks | 100/min |
+| `/api/v3/ask` | POST | JWT | Grounded AI Q&A | 100/min |
+| `/api/v3/search` | POST | JWT | Hybrid search | 200/min |
+| `/api/v3/retrieve` | POST | JWT | Raw retrieval | 200/min |
+| `/api/v3/knowledge/topics` | GET | JWT | Topic hierarchy | 100/min |
+| `/api/v3/knowledge/concepts` | GET | JWT | Concepts list | 100/min |
+| `/api/v3/knowledge/graph` | GET | JWT | Knowledge graph | 50/min |
+| `/api/v3/generate/flashcards` | POST | JWT | Generate flashcards | 50/min |
+| `/api/v3/generate/quiz` | POST | JWT | Generate quiz | 50/min |
+| `/api/v3/generate/summary` | POST | JWT | AI summary | 50/min |
+| `/api/v3/generate/plan` | POST | JWT | Study plan from KB | 50/min |
+| `/api/v3/setup/auto` | POST | JWT | Zero-upload setup | 10/min |
+| `/api/v3/setup/resources` | GET | JWT | Found resources | 50/min |
+| `/api/v3/health` | GET | None | Health check | Unlimited |
 
-### 4.2 Asynchronous Interactions
+### Example: POST /api/v3/ask
 
-| From | To | Trigger | Queue |
-|------|-----|---------|-------|
-| Upload Service | Processing Pipeline | Webhook POST | — (direct invoke) |
-| Processing Pipeline | Embedding Service | After chunking | Supabase Realtime |
-| Processing Pipeline | Knowledge Graph | After extraction | — (direct invoke) |
-| Document Reprocess | All Pipeline Stages | User clicks "Reprocess" | Background job |
-
-### 4.3 Data Consistency
-
-- **Upload → R2**: Strong consistency (R2 is strongly consistent)
-- **R2 → PostgreSQL**: Eventual consistency (pipeline may lag 1-5 minutes)
-- **PostgreSQL → pgvector**: Eventual consistency (embedding generation async)
-- **Cache → Source**: TTL-based (1 hour default, invalidate on reprocess)
-
----
-
-## 5. API Specification
-
-### 5.1 Upload API
-
-```
-POST /api/v3/upload
-Content-Type: multipart/form-data
-Authorization: Bearer <jwt>
-
-Body:
-  files[]: <binary files>
-  metadata: {
-    "exam_id": "jee-2026",
-    "subject": "Physics",
-    "tags": ["thermodynamics", "coaching-notes"]
-  }
-
-Response 202:
-{
-  "upload_id": "uuid",
-  "status": "processing",
-  "files": [
-    {
-      "document_id": "uuid",
-      "filename": "Thermodynamics_Chapter3.pdf",
-      "size": 2457600,
-      "status": "processing",
-      "estimated_time_seconds": 180
-    }
-  ]
-}
-
-Response 400:
-{
-  "error": "INVALID_FILE_TYPE",
-  "message": "File 'virus.exe' is not a supported format. Allowed: PDF, DOCX, TXT, EPUB, JPG, PNG, ZIP",
-  "invalid_files": ["virus.exe"]
-}
-```
-
-### 5.2 Ask API
-
-```
-POST /api/v3/ask
-Content-Type: application/json
-Authorization: Bearer <jwt>
-
-Body:
+**Request:**
+```json
 {
   "question": "What is the ideal gas law?",
-  "context": {
-    "restrict_documents": ["doc-uuid-1"],
-    "restrict_topics": ["thermodynamics"],
-    "max_sources": 5,
-    "min_confidence": 0.7
-  }
+  "filters": {
+    "subject": "Physics",
+    "documents": ["doc-123", "doc-456"],
+    "confidence_min": 0.7
+  },
+  "max_tokens": 1024
 }
+```
 
-Response 200:
+**Response:**
+```json
 {
-  "answer": "The ideal gas law is PV = nRT [1], where P is pressure, V is volume, n is moles, R is the gas constant, and T is temperature in Kelvin.",
+  "answer": "The ideal gas law states that PV = nRT [1], where P is pressure, V is volume, n is the number of moles, R is the gas constant, and T is temperature [2].",
   "citations": [
     {
       "index": 1,
-      "document_id": "doc-uuid-1",
-      "document_name": "Chemistry Textbook",
-      "page": 45,
-      "chunk_id": "chunk-uuid",
-      "snippet": "The ideal gas law states that PV = nRT, where...",
-      "confidence": 0.95
-    }
-  ],
-  "retrieval_time_ms": 120,
-  "generation_time_ms": 850
-}
-
-Response 200 (no relevant content):
-{
-  "answer": "I don't have enough information in your knowledge base to answer this question.",
-  "citations": [],
-  "suggestion": "Try uploading a chemistry textbook or searching for 'gas laws' in your documents."
-}
-```
-
-### 5.3 Document List API
-
-```
-GET /api/v3/documents?page=1&limit=20&status=ready
-Authorization: Bearer <jwt>
-
-Response 200:
-{
-  "documents": [
+      "chunk_id": "chunk-789",
+      "document_id": "doc-123",
+      "document_name": "Physics Textbook",
+      "page": 42,
+      "confidence": 0.92,
+      "verified": true
+    },
     {
-      "id": "doc-uuid",
-      "filename": "Thermodynamics_Chapter3.pdf",
-      "size": 2457600,
-      "status": "ready",
-      "subject": "Physics",
-      "tags": ["thermodynamics"],
-      "topics_extracted": 12,
-      "chunks_count": 47,
-      "uploaded_at": "2026-06-26T10:00:00Z",
-      "processed_at": "2026-06-26T10:03:00Z"
+      "index": 2,
+      "chunk_id": "chunk-790",
+      "document_id": "doc-456",
+      "document_name": "NCERT Class 12",
+      "page": 156,
+      "confidence": 0.88,
+      "verified": true
     }
   ],
-  "pagination": {
-    "page": 1,
-    "limit": 20,
-    "total": 156
-  }
+  "grounding_score": 1.0,
+  "retrieval_time_ms": 150,
+  "generation_time_ms": 800
 }
 ```
 
-### 5.4 Search API
+---
+
+## 5. Security Architecture
+
+### 5.1 Authentication Flow
 
 ```
-POST /api/v3/search
-Content-Type: application/json
-Authorization: Bearer <jwt>
-
-Body:
-{
-  "query": "ideal gas law",
-  "filters": {
-    "subject": "Physics",
-    "document_ids": ["doc-uuid-1"],
-    "date_from": "2026-01-01"
-  },
-  "mode": "hybrid",
-  "k": 10
-}
-
-Response 200:
-{
-  "results": [
-    {
-      "chunk_id": "chunk-uuid",
-      "text": "The ideal gas law states PV = nRT...",
-      "document_id": "doc-uuid-1",
-      "document_name": "Chemistry Textbook",
-      "page": 45,
-      "heading": "Gas Laws",
-      "score": 0.92,
-      "highlight_ranges": [[12, 25]]
-    }
-  ],
-  "search_time_ms": 85
-}
+User Login
+  |
+  +---> OAuth 2.0 (Google, GitHub) → Supabase Auth
+  |     |
+  |     +---> JWT (RS256, 1-hour expiry)
+  |     |
+  |     +---> Refresh token (7-day expiry)
+  |
+  +---> SAML 2.0 / LDAP (Enterprise SSO)
+  |     |
+  |     +---> Identity Provider (IdP) → SAML Assertion
+  |     |
+  |     +---> JWT generation from SAML attributes
+  |
+  +---> API Keys (Programmatic Access)
+        |
+        +---> Scoped: read, write, admin
+        +---> Rotation: 90 days
+        +---> Revocation: immediate
 ```
+
+### 5.2 Authorization (RBAC)
+
+| Role | Permissions |
+|------|-------------|
+| **user** | CRUD own documents, search own knowledge base, generate flashcards/quizzes, view analytics |
+| **editor** | user + edit shared topics, add comments, manage group content |
+| **admin** | editor + manage group members, view group analytics, moderate content |
+| **system** | Internal service-to-service auth, read all data for processing |
+| **enterprise** | admin + SAML SSO, API access, custom branding, dedicated support |
+
+### 5.3 Row-Level Security (RLS)
+
+All tables must have RLS policies:
+```sql
+ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can only access their own documents"
+ON documents FOR ALL
+TO authenticated
+USING (user_id = auth.uid());
+
+CREATE POLICY "Service role can access all documents"
+ON documents FOR ALL
+TO service_role
+USING (true);
+```
+
+### 5.4 Data Encryption
+
+| Layer | Method | Key Management |
+|-------|--------|---------------|
+| Transport | TLS 1.3 | Let's Encrypt auto-renew |
+| At Rest (R2) | AES-256 | Cloudflare-managed keys |
+| At Rest (PostgreSQL) | AES-256 | Supabase-managed keys |
+| Field-Level (PII) | AES-256-GCM | User-specific keys, KMS rotation |
+| Document Content | AES-256-GCM | User-specific encryption keys (zero-knowledge) |
 
 ---
 
 ## 6. Storage Architecture
 
-### 6.1 Object Storage (Cloudflare R2)
+### 6.1 Object Storage (R2)
 
-**Structure:**
 ```
-bucket: adaptive-study-planner-documents
-  └── users/
-      └── {user_id}/
-          ├── documents/
-          │   └── {document_id}/
-          │       ├── original.pdf          (immutable, user-uploaded)
-          │       ├── extracted.md          (Docling output)
-          │       └── thumbnails/
-          │           └── page-{n}.jpg
-          ├── exports/
-          │   └── {export_id}/
-          │       ├── flashcards.json
-          │       └── quiz.json
-          └── backups/
-              └── {date}/
-                  └── telegram-cold-backup.zip
+Bucket: adaptive-study-planner-documents
+  |
+  +---> users/{user_id}/
+  |     |
+  |     +---> documents/{document_id}/
+  |     |     |
+  |     |     +---> original.pdf (raw upload)
+  |     |     +---> extracted.md (parsed text)
+  |     |     +---> thumbnails/page-{n}.jpg (page previews)
+  |     |
+  |     +---> audio/{cache_key}.mp3 (TTS audio)
+  |     |
+  |     +---> exports/{export_id}/
+  |     |     +---> knowledge-base.json
+  |     |     +---> study-guide.md
+  |     |     +---> flashcards.apkg
+  |     |
+  |     +---> backups/{date}/
+  |           +---> document-{id}-v{version}.pdf
+  |
+  +---> system/
+        +---> models/ (BAAI/BGE model files)
+        +---> cache/ (temporary processing files)
 ```
 
-**Lifecycle:**
-- Original documents: retained until user deletes account + 30-day grace
-- Extracted markdown: retained until document deleted
-- Thumbnails: auto-generated, cached for 30 days
-- Exports: user-generated, retained until user deletes
-- Backups: daily to cold storage (R2 Glacier), 1-year retention
+### 6.2 Metadata Database (PostgreSQL)
 
-**Security:**
-- Presigned URLs with 5-minute expiry for download
-- No public bucket access
-- CORS restricted to `https://adaptive-study-planner.com`
-- Server-side encryption (AES-256)
-
-### 6.2 PostgreSQL (Supabase)
-
-**Schema (excerpt):**
-
+**documents table:**
 ```sql
--- Documents table
 CREATE TABLE documents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -586,19 +760,31 @@ CREATE TABLE documents (
     mime_type TEXT NOT NULL,
     r2_path TEXT NOT NULL,
     sha256_hash TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'uploaded' CHECK (status IN ('uploaded', 'validating', 'extracting', 'chunking', 'embedding', 'indexing', 'ready', 'error')),
+    status TEXT NOT NULL DEFAULT 'uploaded' 
+        CHECK (status IN ('uploaded', 'validating', 'scanning', 'extracting', 'chunking', 'embedding', 'indexing', 'ready', 'error', 'ready_with_warnings')),
     subject TEXT,
     tags TEXT[],
+    language TEXT DEFAULT 'en',
+    source_type TEXT DEFAULT 'user_upload',
+    source_confidence REAL DEFAULT 0.65,
     metadata JSONB DEFAULT '{}',
     page_count INTEGER,
     topics_extracted INTEGER DEFAULT 0,
     chunks_count INTEGER DEFAULT 0,
+    concepts_count INTEGER DEFAULT 0,
+    formulas_count INTEGER DEFAULT 0,
+    questions_count INTEGER DEFAULT 0,
+    processing_started_at TIMESTAMPTZ,
+    processing_completed_at TIMESTAMPTZ,
+    error_message TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    deleted_at TIMESTAMPTZ  -- soft delete
+    deleted_at TIMESTAMPTZ
 );
+```
 
--- Chunks table (with pgvector)
+**chunks table (with pgvector):**
+```sql
 CREATE TABLE chunks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     document_id UUID REFERENCES documents(id) ON DELETE CASCADE,
@@ -607,228 +793,303 @@ CREATE TABLE chunks (
     heading TEXT,
     page_number INTEGER,
     token_count INTEGER,
-    embedding VECTOR(1024),  -- pgvector
+    embedding VECTOR(1024),
     metadata JSONB DEFAULT '{}',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- Full-text search index
-CREATE INDEX idx_chunks_fts ON chunks USING gin(to_tsvector('english', text));
-
--- Vector index (IVFFlat for < 1M vectors, HNSW for > 1M)
-CREATE INDEX idx_chunks_embedding ON chunks USING ivfflat (embedding vector_ip_ops) WITH (lists = 100);
-
--- Knowledge graph edges
-CREATE TABLE knowledge_edges (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-    source_node TEXT NOT NULL,      -- e.g., "concept:ideal_gas_law"
-    target_node TEXT NOT NULL,      -- e.g., "concept:thermodynamics"
-    relationship TEXT NOT NULL,     -- e.g., "prerequisite", "related", "part-of"
-    confidence REAL NOT NULL DEFAULT 0.5,
-    source_document_id UUID REFERENCES documents(id) ON DELETE CASCADE,
+    parent_chunk_id UUID REFERENCES chunks(id),
+    chunk_level INTEGER DEFAULT 1,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ```
 
-### 6.3 Cache (Upstash Redis / Cloudflare Cache API)
+**knowledge_edges table:**
+```sql
+CREATE TABLE knowledge_edges (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    source_node TEXT NOT NULL,
+    target_node TEXT NOT NULL,
+    relationship TEXT NOT NULL CHECK (relationship IN ('prerequisite', 'related', 'part-of', 'covers', 'example-of')),
+    confidence REAL NOT NULL DEFAULT 0.5,
+    source_document_id UUID REFERENCES documents(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id, source_node, target_node, relationship)
+);
+```
 
-**Cache Layers:**
+### 6.3 Vector Database (pgvector)
 
-| Layer | Key Pattern | TTL | Size |
-|-------|-------------|-----|------|
-| Query Results | `query:{hash}` | 1 hour | 10KB per result |
-| Search Results | `search:{hash}` | 30 min | 5KB per result |
-| Embeddings | `emb:{chunk_id}` | 24 hours | 4KB per vector |
-| User Session | `session:{user_id}` | 24 hours | 1KB per user |
-| Rate Limit | `rate:{ip}` | 1 min | 100 bytes |
+```sql
+-- IVFFlat index (for < 1M vectors)
+CREATE INDEX idx_chunks_embedding_ivfflat 
+ON chunks USING ivfflat (embedding vector_cosine_ops)
+WITH (lists = 100);
+
+-- HNSW index (for > 1M vectors, Phase 4)
+CREATE INDEX idx_chunks_embedding_hnsw 
+ON chunks USING hnsw (embedding vector_cosine_ops)
+WITH (m = 16, ef_construction = 64);
+
+-- Full-text search index
+CREATE INDEX idx_chunks_text_search 
+ON chunks USING GIN (to_tsvector('english', text));
+
+-- Metadata indexes
+CREATE INDEX idx_chunks_user_id ON chunks(user_id);
+CREATE INDEX idx_chunks_document_id ON chunks(document_id);
+CREATE INDEX idx_chunks_heading ON chunks(heading);
+```
+
+### 6.4 Knowledge Graph (PostgreSQL → ArangoDB)
+
+**Phase 3 (PostgreSQL):**
+- Single `knowledge_edges` table with recursive CTE traversal
+- Sufficient for < 10K edges per user
+- Latency: < 100ms for 3-hop traversal
+
+**Phase 4 (ArangoDB migration):**
+- Multi-model graph database
+- AQL queries for complex traversals
+- Native graph visualization support
+- Migration script: export PostgreSQL edges → ArangoDB import → update queries
+
+### 6.5 Telegram Cold Storage
+
+**Purpose:** Optional off-site backup for raw documents
+
+**Benefits:**
+- Free unlimited storage
+- Cloud-independent (not R2, not AWS)
+- Simple API (HTTP POST with file)
+- Preserves original file format
+
+**Limitations:**
+- Not a storage service (no SLA)
+- No search capability
+- Manual recovery only (requires admin intervention)
+- 2GB file size limit per file
+- Recovery is slow (download via Telegram API)
+- Privacy concerns (Telegram's encryption model)
+
+**Recovery Flow:**
+1. Admin triggers recovery for user_id + document_id
+2. Bot searches Telegram channel for matching caption
+3. Bot downloads file to temporary storage
+4. System validates file (SHA-256 checksum, magic numbers)
+5. If valid, file is restored to R2 and re-indexed
+6. If invalid, admin is notified for manual intervention
 
 ---
 
 ## 7. AI Pipeline Architecture
 
-### 7.1 Document Processing Pipeline
+### 7.1 Document Processing Pipeline (13 Stages)
 
 ```
-Raw Document (PDF/DOCX/etc.)
-│
-▼
-[Docling Parser] ────────────────────► Structured Markdown
-│                                      (headings, tables, formulas, images)
-│
-▼
-[OCR Module] ────────────────────────► Text from scanned pages / images
-│                                      (Tesseract for printed, Google Vision for handwritten)
-│
-▼
-[Formula Extractor] ─────────────────► LaTeX formulas
-│                                      (MathPix API for complex math)
-│
-▼
-[Text Cleaner] ──────────────────────► Cleaned text
-│                                      (remove headers, footers, watermarks, normalize whitespace)
-│
-▼
-[Semantic Chunker] ──────────────────► Chunks with metadata
-│                                      (300-800 tokens, heading-aware, overlap 80 tokens)
-│
-▼
-[Knowledge Extractor (LLM)] ──────────► Extracted concepts, definitions, formulas, questions
-│                                      (structured JSON output: { concepts: [...], definitions: [...], formulas: [...] })
-│
-▼
-[Embedding Generator] ──────────────► 1024-dim vectors
-│                                      (BAAI/bge-large-en-v1.5, batch size 32, L2 normalized)
-│
-▼
-[Indexer] ───────────────────────────► pgvector + full-text index + metadata index
-│
-▼
-[Knowledge Graph Builder] ────────────► Nodes & edges in graph DB
-│                                      (concepts → prerequisites → related)
-│
-▼
-[Status Updater] ────────────────────► Document status = "ready"
+Upload
+  |
+  +---> [Stage 1] Validation
+  |     | Magic numbers, size, virus scan
+  |     | [FAIL] → Dead Letter Queue
+  |
+  +---> [Stage 2] Virus Scan
+  |     | ClamAV or cloud-native
+  |     | [FAIL] → Quarantine, notify user
+  |
+  +---> [Stage 3] Encoding Detection
+  |     | chardet / charset-normalizer
+  |     | [FAIL] → Process as UTF-8 with warning
+  |
+  +---> [Stage 4] Language Detection
+  |     | fastText / langdetect
+  |     | [FAIL] → Default to English
+  |
+  +---> [Stage 5] OCR (if scanned/image)
+  |     | Tesseract → Google Vision (fallback)
+  |     | [FAIL] → Flag for manual review
+  |
+  +---> [Stage 6] Parsing
+  |     | Docling → Structured Markdown
+  |     | [FAIL] → Corrupted document queue
+  |
+  +---> [Stage 7] Cleaning
+  |     | Remove headers, footers, watermarks
+  |     | Normalize whitespace
+  |
+  +---> [Stage 8] Metadata Extraction
+  |     | Topics, chapters, concepts, formulas, questions
+  |     | Difficulty classification
+  |
+  +---> [Stage 9] Duplicate Removal
+  |     | SHA-256 + pHash across documents
+  |     | Deduplicate chunks
+  |
+  +---> [Stage 10] Semantic Chunking
+  |     | Heading-aware, 300-800 tokens, 80 overlap
+  |     | Parent/child relationships
+  |
+  +---> [Stage 11] Embedding
+  |     | BAAI/BGE (default) or OpenAI (optional)
+  |     | Batch 32, L2 normalized, Redis cache
+  |
+  +---> [Stage 12] Knowledge Graph Construction
+  |     | Concepts → Prerequisites → Relationships
+  |     | Edge confidence scoring
+  |
+  +---> [Stage 13] Indexing
+  |     | Vector index (pgvector)
+  |     | Full-text index (GIN tsvector)
+  |     | Metadata index (B-tree)
+  |
+  +---> Status = "ready"
 ```
+
+**Failure & Retry:**
+- Transient errors (network, rate limit): retry 3x with exponential backoff (1s, 2s, 4s)
+- Permanent errors (corrupted file, unsupported format): move to dead letter queue, notify user
+- Low OCR confidence (< 60%): flag for manual review, mark "ready_with_warnings"
+- Virus detected: reject, quarantine, notify user
+- Duplicate detected: offer "replace existing" or "keep both"
 
 ### 7.2 Retrieval Pipeline
 
 ```
-User Query: "ideal gas law"
-│
-▼
-[Query Preprocessor]
-  - Spell correction
-  - Synonym expansion ("ideal gas" → "perfect gas")
-  - Language detection
-│
-▼
-┌──────────────────────────────────────────────────┐
-│  PARALLEL RETRIEVAL (fork-join)                  │
-│  ┌──────────────┐  ┌──────────────┐  ┌─────────┐ │
-│  │ Dense (vector)│  │ Sparse (BM25)│  │ Graph   │ │
-│  │ Top 10        │  │ Top 10        │  │ Top 5   │ │
-│  │ < 200ms       │  │ < 100ms       │  │ < 50ms  │ │
-│  └──────────────┘  └──────────────┘  └─────────┘ │
-└──────────────────────────────────────────────────┘
-│
-▼
-[Metadata Filter] ───────────────────► Apply SQL filters (subject, document, confidence)
-│
-▼
-[Re-Ranker] ──────────────────────────► BAAI/bge-reranker on combined candidates
-│                                        (cross-encoder, scores 0-1)
-│
-▼
-[Fusion Engine] ──────────────────────► RRF: score = sum(1 / (k + rank)) for each source
-│                                        (k = 60, standard RRF parameter)
-│
-▼
-[Top-K Selector] ─────────────────────► Return top 5 results
-│
-▼
-[Citation Formatter] ─────────────────► Format: [1] Source Name, Page X, Confidence Y
-```
-
-### 7.3 LLM Provider Configuration
-
-```yaml
-# Default (local, free)
-provider: ollama
-model: llama3.1:8b
-base_url: http://localhost:11434
-max_tokens: 2048
-temperature: 0.3
-
-# Production (GPU, high throughput)
-provider: vllm
-model: meta-llama/Meta-Llama-3.1-8B-Instruct
-base_url: http://vllm.internal:8000/v1
-max_tokens: 2048
-temperature: 0.3
-
-# Fallback (paid, always available)
-provider: openai
-model: gpt-4o-mini
-api_key: ${OPENAI_API_KEY}
-max_tokens: 2048
-temperature: 0.3
+User Query
+  |
+  +---> [1] Intent Detection
+  |     | Classify: definition, problem, comparison, summary, quiz_request
+  |     | Model: lightweight classifier (BERT-tiny or rule-based)
+  |
+  +---> [2] Query Planning
+  |     | Select strategy based on intent
+  |     | Definition → Dense + Graph
+  |     | Problem → Sparse + Metadata
+  |     | Comparison → Dense + Sparse + Graph
+  |
+  +---> [3] Parallel Retrieval (fork-join)
+  |     |
+  |     +---> Dense: pgvector similarity (top 10)
+  |     +---> Sparse: BM25 tsvector (top 10)
+  |     +---> Graph: Prerequisite traversal (top 5)
+  |     +---> Metadata: SQL WHERE pre-filtering
+  |
+  +---> [4] Combine & Deduplicate
+  |     | Merge results from all engines
+  |     | Remove duplicates (same chunk from multiple engines)
+  |
+  +---> [5] Re-ranking
+  |     | BAAI/bge-reranker cross-encoder
+  |     | Score each candidate 0-1
+  |
+  +---> [6] Source Ranking
+  |     | Boost by confidence: official ×1.5, publisher ×1.2, community ×0.8
+  |
+  +---> [7] Reciprocal Rank Fusion (RRF, k=60)
+  |     | score = Σ(1 / (k + rank_i))
+  |
+  +---> [8] Context Assembly
+  |     | Top 5 chunks formatted for LLM
+  |     | Include citations and metadata
+  |
+  +---> [9] LLM Generation
+  |     | Strict grounding prompt
+  |     | Temperature: 0.3
+  |
+  +---> [10] Citation Verification
+  |     | Extract [1], [2] from LLM output
+  |     | Verify against retrieved chunks
+  |     | Flag invented citations
+  |
+  +---> [11] Final Response
+        | Answer + citations + confidence scores + evidence trace
 ```
 
 ---
 
-## 8. Security Architecture
+## 8. Sequence Diagrams
 
-### 8.1 Authentication & Authorization
+### 8.1 Document Upload & Processing (Full Pipeline)
 
 ```
-User (Browser)
-│
-▼
-[Login] ────────► Supabase Auth (email/password, OAuth, SAML)
-│                   JWT token returned (RS256, 1-hour expiry)
-│
-▼
-[API Request] ──► Cloudflare Worker
-│                   Validate JWT signature (Supabase public key)
-│                   Check token expiry
-│                   Extract user_id from JWT sub claim
-│
-▼
-[Supabase Edge Function]
-│                   RLS policy: WHERE user_id = auth.uid()
-│                   Query only returns user's own data
-│
-▼
-[PostgreSQL]
-│                   RLS enforced at database level
-│                   No bypass possible even with raw SQL
+User    Browser    Worker    R2    PostgreSQL    Edge Function    Redis
+ |         |         |      |         |              |             |
+ |--drag drop-->|     |      |         |              |             |
+ |         |--POST /upload->| |         |              |             |
+ |         |     |--validate JWT-->|     |              |             |
+ |         |     |--rate limit check->|  |              |             |
+ |         |     |--upload file->|     |              |             |
+ |         |     |     |--stream->|   |              |             |
+ |         |     |     |         |--insert doc-->|     |             |
+ |         |     |     |         |--status: uploaded-->|            |
+ |         |     |--202 Accepted-->|   |              |             |
+ |         |<--show progress--|    |   |              |             |
+ |         |     |     |         |--trigger webhook-->|            |
+ |         |     |     |         |              |--process stage 1-13|
+ |         |     |     |         |              |--update status-->|
+ |         |     |     |         |--status: ready-->|             |
+ |         |<--WebSocket: ready--| |              |             |
+ |         |<--show results--|    |              |             |
 ```
 
-### 8.2 Data Encryption
+### 8.2 Zero-Upload Exam Setup
 
-| Data | Encryption | Key Management |
-|------|-----------|----------------|
-| Raw documents (R2) | AES-256 server-side | Cloudflare-managed |
-| Document metadata (PostgreSQL) | AES-256 at rest | Supabase-managed |
-| Embeddings (pgvector) | AES-256 at rest | Supabase-managed |
-| User passwords | bcrypt (cost 12) | Supabase Auth |
-| API keys | Hashed (SHA-256) | Application-managed |
-| JWT tokens | RS256 signed | Supabase Auth |
-| In transit (all APIs) | TLS 1.3 | Cloudflare edge |
-
-### 8.3 Multi-Tenancy Isolation
-
-```sql
--- RLS Policy Example (documents table)
-CREATE POLICY "documents_select_own" ON documents
-  FOR SELECT USING (user_id = auth.uid());
-
-CREATE POLICY "documents_insert_own" ON documents
-  FOR INSERT WITH CHECK (user_id = auth.uid());
-
-CREATE POLICY "documents_update_own" ON documents
-  FOR UPDATE USING (user_id = auth.uid());
-
-CREATE POLICY "documents_delete_own" ON documents
-  FOR DELETE USING (user_id = auth.uid());
+```
+User    Browser    Worker    PostgreSQL    Web Scraper    DuckDuckGo
+ |         |         |         |              |             |
+ |--enter exam-->|   |         |              |             |
+ |         |--POST /setup/auto->| |            |             |
+ |         |     |--query exam DB-->|          |             |
+ |         |     |     |--return exam metadata-->|          |
+ |         |     |     |         |--search official sites-->| |
+ |         |     |     |         |              |--return results|
+ |         |     |     |--store found_resources-->|          |
+ |         |<--return ranked resources--|        |             |
+ |--approve resources-->| |         |              |             |
+ |         |--POST /setup/approve->| |          |             |
+ |         |     |     |--download & process-->|            |
+ |         |     |     |--status: ready-->|     |             |
+ |         |<--completion notification--|      |             |
 ```
 
-**Tenant Isolation Guarantee:**
-- Every table has `user_id` column
-- Every query has RLS policy enforced
-- No `SUPERUSER` or `BYPASSRLS` roles for application
-- Row-level, not schema-level isolation (simpler, more scalable)
+### 8.3 Hybrid Retrieval Execution
 
-### 8.4 Rate Limiting & DDoS Protection
+```
+User    Browser    Worker    PostgreSQL    Redis    LLM
+ |         |         |         |             |       |
+ |--ask question-->|  |         |             |       |
+ |         |--POST /ask->|     |             |       |
+ |         |     |--intent detection->|        |       |
+ |         |     |--query cache check->|     |       |
+ |         |     |     |--cache hit?-->      |       |
+ |         |     |     |     |               |       |
+ |         |     |     |     |--cache miss-->|       |
+ |         |     |     |     |               |       |
+ |         |     |--parallel retrieval-------->|       |
+ |         |     |     |--dense + sparse + graph-->  |
+ |         |     |     |--return candidates-->|     |
+ |         |     |--re-rank + source rank-->|  |     |
+ |         |     |--RRF fusion-->|          |       |
+ |         |     |--assemble context-->|      |       |
+ |         |     |--generate with LLM-------->|       |
+ |         |     |     |     |               |--response|
+ |         |     |--verify citations-->|      |       |
+ |         |     |--cache response-->        |       |
+ |         |<--return answer + citations--| |       |
+```
 
-| Layer | Mechanism | Limit |
-|-------|-----------|-------|
-| Cloudflare | WAF + DDoS protection | Automatic |
-| Cloudflare Worker | Per-IP rate limit | 100 req/min free, 1000 pro |
-| Supabase API | Project-level rate limit | 10,000 req/min |
-| PostgreSQL | Connection pool limit | 100 concurrent |
-| LLM API | Token bucket per user | 10,000 tokens/min free |
+### 8.4 Knowledge Graph Query
+
+```
+User    Browser    Worker    PostgreSQL
+ |         |         |         |
+ |--view graph-->|   |         |
+ |         |--GET /knowledge/graph->|     |
+ |         |     |--query concepts-->|     |
+ |         |     |--query edges-->|      |
+ |         |     |--traverse prerequisites-->| |
+ |         |     |     |--return graph data-->| |
+ |         |<--return nodes + edges--|     |
+ |         |<--render D3.js graph--|      |
+```
 
 ---
 
@@ -836,169 +1097,158 @@ CREATE POLICY "documents_delete_own" ON documents
 
 ### 9.1 Environment Strategy
 
-| Environment | Purpose | Infrastructure |
-|-------------|---------|----------------|
-| Local | Developer testing | Docker Compose (Ollama, PostgreSQL, R2 local) |
-| Dev | Feature testing | Supabase branch, Cloudflare Workers dev |
-| Staging | Pre-release testing | Supabase project, Cloudflare Workers staging |
-| Production | Live users | Supabase production, Cloudflare Workers production |
+| Environment | Purpose | Database | AI | Storage |
+|-------------|---------|----------|-----|---------|
+| Local | Developer testing | Local PostgreSQL + pgvector | Local Ollama | Local MinIO |
+| Dev | Feature testing | Supabase dev project | Local Ollama | R2 dev bucket |
+| Staging | Pre-release validation | Supabase staging | vLLM (GPU) | R2 staging bucket |
+| Production | Live users | Supabase production | vLLM (GPU) + OpenAI fallback | R2 production bucket |
 
-### 9.2 CI/CD Pipeline
+### 9.2 CI/CD Pipeline (GitHub Actions)
 
 ```
-GitHub Push
-│
-▼
-GitHub Actions
-├── Lint (eslint, prettier, flake8)
-├── Unit Tests (pytest, jest)
-├── Integration Tests (Supabase local, R2 local)
-├── Security Scan (npm audit, pip-audit, Trivy)
-│
-▼
-Build & Deploy (Staging)
-├── Deploy Edge Functions (Supabase CLI)
-├── Deploy Cloudflare Worker (Wrangler)
-│
-▼
-Manual Approval (Production)
-│
-▼
-Deploy Production
-├── Deploy Edge Functions
-├── Deploy Cloudflare Worker
-├── Run Database Migrations
-├── Smoke Tests (health checks)
+Push to main
+  |
+  +---> [1] Lint (ESLint, flake8, black)
+  |
+  +---> [2] Unit Tests (pytest, jest)
+  |     | Coverage ≥ 80%
+  |
+  +---> [3] Security Scan (bandit, safety, Trivy, OWASP ZAP)
+  |     | 0 critical/high vulnerabilities
+  |
+  +---> [4] Integration Tests (pytest integration/)
+  |     | 100% API endpoints tested
+  |
+  +---> [5] AI Evaluation (Ollama, benchmark dataset)
+  |     | MRR@10 > 0.6, Precision@5 > 0.7
+  |
+  +---> [6] Deploy to Staging
+  |     | Terraform apply / Wrangler deploy
+  |
+  +---> [7] E2E Tests (Cypress)
+  |     | 100% critical user flows
+  |
+  +---> [8] Performance Tests (k6)
+  |     | 200 concurrent users, < 1% error
+  |
+  +---> [9] Manual Approval (production deploy)
+  |
+  +---> [10] Deploy to Production
+        | Terraform apply / Wrangler deploy
+        | Database migration (reversible)
+        | Feature flags (launch darkly)
 ```
 
-### 9.3 Monitoring & Alerting
+### 9.3 Infrastructure as Code
 
-| Metric | Tool | Threshold | Alert |
-|--------|------|-----------|-------|
-| API Error Rate | Sentry | > 1% | PagerDuty |
-| API Latency p95 | Cloudflare Analytics | > 500ms | Slack |
-| Document Processing Time | Custom Dashboard | > 10 min | Slack |
-| Vector Search Latency | PostgreSQL Logs | > 200ms | Slack |
-| LLM Token Usage | Custom Dashboard | > 90% quota | Email |
-| R2 Storage Usage | Cloudflare Dashboard | > 80% capacity | Email |
-| Database Connections | PostgreSQL Logs | > 80% pool | PagerDuty |
+| Component | Tool | Files |
+|-----------|------|-------|
+| Cloudflare Workers | Wrangler | `wrangler.toml` |
+| R2 Buckets | Terraform | `terraform/r2.tf` |
+| D1 / KV / Cache | Wrangler CLI | `wrangler.toml` |
+| Supabase | Supabase CLI | `supabase/config.toml` |
+| Monitoring | Terraform | `terraform/grafana.tf` |
 
 ---
 
-## 10. Sequence Diagrams
+## 10. Scaling Strategy
 
-### 10.1 Document Upload & Processing
+### 10.1 Horizontal Scaling
 
-```
-User        Web App    Cloudflare    Upload Edge    R2    Processing    PostgreSQL
- │             │            │              │          │      Edge Func       │
- │──select──▶│            │              │          │                    │
- │  files    │            │              │          │                    │
- │           │──POST /upload──▶│         │          │                    │
- │           │  JWT + multipart           │          │                    │
- │           │            │──validate──▶│          │                    │
- │           │            │  JWT + rate limit      │                    │
- │           │            │◀─ok────────│          │                    │
- │           │            │            │──upload──▶│                    │
- │           │            │            │          │──store──▶│          │
- │           │            │            │          │◀─url────│          │
- │           │            │            │◀─url────│          │          │
- │           │            │◀─202───────│          │          │          │
- │           │◀─upload_id─┤            │          │          │          │
- │           │            │            │──trigger webhook──▶│        │
- │           │            │            │          │          │──download──▶│
- │           │            │            │          │          │◀─file────│
- │           │            │            │          │          │──extract──▶│
- │           │            │            │          │          │◀─markdown│
- │           │            │            │          │          │──chunk───▶│
- │           │            │            │          │          │◀─chunks──│
- │           │            │            │          │          │──embed───▶│
- │           │            │            │          │          │◀─vectors─│
- │           │            │            │          │          │──index───▶│
- │           │            │            │          │          │◀─ok─────│
- │           │──GET /status───────────▶│          │          │          │
- │           │            │──query───▶│          │          │          │
- │           │            │          │◀─ready───│          │          │
- │           │◀─status=ready────────│          │          │          │
- │◀─"Done!"─┤            │              │          │                    │
-```
+| Component | Scaling Strategy | Trigger |
+|-----------|------------------|---------|
+| Cloudflare Workers | Auto-scale (serverless) | Traffic |
+| Supabase Edge Functions | Auto-scale (serverless) | Traffic |
+| PostgreSQL | Read replicas, PgBouncer | Connection count > 100 |
+| pgvector | IVFFlat → HNSW, partitioning | Vector count > 1M |
+| Redis | Upstash auto-scale | Memory > 80% |
+| R2 | Unlimited (object storage) | Storage |
+| Ollama | Kubernetes HPA | GPU utilization > 80% |
+| vLLM | Kubernetes HPA | GPU utilization > 80% |
 
-### 10.2 Question & Answer
+### 10.2 Connection Pooling
 
 ```
-User        Web App    Cloudflare    AI Orchestrator    Retrieval    LLM
- │             │            │                │              │         │
- │──type───▶│            │                │              │         │
- │ question  │            │                │              │         │
- │           │──POST /ask──▶│              │              │         │
- │           │  JWT + question              │              │         │
- │           │            │──validate──▶│  │              │         │
- │           │            │◀─ok────────│  │              │         │
- │           │            │            │──preprocess──▶│           │
- │           │            │            │◀─query──────│  │         │
- │           │            │            │──retrieve───▶│  │         │
- │           │            │            │              │──dense───▶│
- │           │            │            │              │◀─top10───│
- │           │            │            │              │──sparse──▶│
- │           │            │            │              │◀─top10───│
- │           │            │            │              │──rerank──▶│
- │           │            │            │              │◀─top5────│
- │           │            │            │◀─results───│  │         │
- │           │            │            │──build prompt──▶│        │
- │           │            │            │◀─prompt────│  │         │
- │           │            │            │──generate───▶│  │       │
- │           │            │            │              │──call───▶│
- │           │            │            │              │◀─answer─│
- │           │            │            │◀─answer────│  │         │
- │           │            │            │──verify───▶│  │         │
- │           │            │            │◀─citations─│  │         │
- │           │            │◀─response──│  │              │         │
- │           │◀─answer + citations────│  │              │         │
- │◀─render──┤            │                │              │         │
+Application → PgBouncer → PostgreSQL
+  |
+  +---> Pool size: 20 connections per app instance
+  +---> Max connections: 200 per database
+  +---> Transaction pooling mode
+  +---> Idle timeout: 300s
+```
+
+### 10.3 Read Replicas
+
+```
+Write → Primary PostgreSQL (us-east-1)
+  |
+Read → Replica 1 (us-east-1)
+Read → Replica 2 (eu-west-1)
+Read → Replica 3 (ap-south-1)
 ```
 
 ---
 
-## 11. Scalability Strategy
+## 11. Monitoring & Observability
 
-### 11.1 Horizontal Scaling
+### 11.1 Metrics
 
-| Component | Current Capacity | Scaling Strategy | Bottleneck |
-|-----------|------------------|------------------|------------|
-| Cloudflare Worker | 100k req/day | Automatic (serverless) | None |
-| Supabase Edge Func | 10k invocations/hour | Automatic (serverless) | Cold start (1-2s) |
-| PostgreSQL | 100 connections | Connection pooling (PgBouncer) | CPU on complex queries |
-| pgvector | 1M vectors | HNSW index + partition by user | Memory for HNSW |
-| R2 | Unlimited | Automatic (object storage) | Egress costs |
-| vLLM | 100 concurrent | Auto-scale GPU instances (1-3) | GPU cost |
-| Redis | 10k keys | Upgrade plan | Memory |
+| Metric | Type | Target | Alert |
+|--------|------|--------|-------|
+| Processing success rate | Gauge | > 99.5% | P0 if < 99% |
+| Processing latency p95 | Histogram | < 5 min | P1 if > 10 min |
+| Retrieval latency p95 | Histogram | < 200ms | P1 if > 500ms |
+| AI response latency | Histogram | < 2s | P1 if > 5s |
+| Cache hit rate | Gauge | > 80% | P2 if < 60% |
+| OCR accuracy | Gauge | > 85% | P2 if < 80% |
+| Retrieval precision@5 | Gauge | > 80% | P0 if < 70% |
+| Hallucination rate | Counter | 0% | P0 if > 0% |
+| Citation accuracy | Gauge | 100% | P0 if < 100% |
+| Active users | Counter | 10,000 | — |
+| Documents processed | Counter | 100,000/month | — |
+| Knowledge graph edges | Counter | 10M total | — |
 
-### 11.2 Performance Optimization
+### 11.2 Distributed Tracing
 
-1. **Embedding Caching**: Cache embeddings in Redis (24h TTL). Only re-embed changed chunks.
-2. **Query Caching**: Cache search results (1h TTL). 80% of queries are repeated.
-3. **Connection Pooling**: PgBouncer for PostgreSQL (100 connections → 1000 clients).
-4. **Read Replicas**: Route read queries to PostgreSQL replicas. Writes go to primary.
-5. **CDN Caching**: Cache static assets (JS, CSS, images) at Cloudflare edge.
-6. **Lazy Loading**: Load document chunks on demand, not all at once.
-7. **Batch Processing**: Process documents in batches of 10 during off-peak hours.
+```
+Request ID (correlation ID)
+  |
+  +---> Cloudflare Worker (trace span: gateway)
+  +---> PostgreSQL (trace span: database)
+  +---> Redis (trace span: cache)
+  +---> R2 (trace span: storage)
+  +---> Edge Function (trace span: processing)
+  +---> LLM (trace span: inference)
+```
+
+**Tools:** OpenTelemetry SDK → Jaeger → Grafana
+
+### 11.3 Alerts
+
+| Priority | Channel | Response Time | Examples |
+|----------|---------|---------------|----------|
+| P0 | PagerDuty + Phone | 15 min | Database down, R2 outage, security breach |
+| P1 | Slack #alerts | 1 hour | Latency > 500ms, processing failures > 1% |
+| P2 | Slack #warnings | 4 hours | Cache hit rate < 60%, OCR accuracy < 80% |
+| P3 | Email digest | 24 hours | Minor performance degradation, non-critical errors |
 
 ---
 
-## 12. Failure Handling
+## 12. Error Handling & Retry Strategy
 
-### 12.1 Failure Scenarios
+### 12.1 Retry Logic
 
-| Scenario | Detection | Automatic Response | Manual Response |
-|----------|-----------|-------------------|-----------------|
-| Document upload fails | R2 5xx | Retry 3x, then queue for manual review | Admin reprocesses from queue |
-| OCR fails | Low confidence (< 60%) | Flag for manual review, notify user | User reviews and approves/corrects |
-| Embedding generation fails | BAAI model error | Retry with OpenAI fallback (if pro tier) | Admin investigates model health |
-| Vector search slow | > 200ms p95 | Switch to HNSW index, warm cache | DBA optimizes index |
-| LLM timeout | > 30s | Return cached response or "try again later" | Ops checks GPU health |
-| Database connection exhausted | Pool saturation | Queue requests, alert on-call | DBA increases pool size |
-| JWT validation failure | Invalid signature | 401 Unauthorized, prompt re-login | Security team investigates |
-| RLS bypass attempt | Query without user_id | Reject query, log incident | Security audit |
+| Service | Max Retries | Backoff | Strategy | Fallback |
+|---------|------------|---------|----------|----------|
+| PostgreSQL | 3 | 1s, 2s, 4s | Exponential | Read replica |
+| R2 | 3 | 1s, 2s, 4s | Exponential | S3 |
+| Redis | 3 | 500ms, 1s, 2s | Exponential | In-memory cache |
+| LLM (Ollama) | 3 | 2s, 4s, 8s | Exponential | vLLM → OpenAI |
+| OCR (Tesseract) | 2 | 1s, 2s | Exponential | Google Vision |
+| MathPix | 3 | 1s, 2s, 4s | Exponential | Skip formula extraction |
+| Google Vision | 3 | 1s, 2s, 4s | Exponential | Manual review queue |
+| DuckDuckGo | 2 | 2s, 4s | Exponential | Google Search |
 
 ### 12.2 Circuit Breaker Pattern
 
@@ -1023,23 +1273,62 @@ Fallback chain: vLLM → OpenAI → Cached response → "Service unavailable"
 
 ---
 
-## 13. Cost Estimates (Monthly, 1000 active users)
+## 13. Disaster Recovery
 
-| Component | Service | Cost | Notes |
-|-----------|---------|------|-------|
-| Database | Supabase Pro | $25 | 8GB storage, 500k Edge Func invocations |
-| Object Storage | Cloudflare R2 | $15 | 500GB storage, 1TB egress |
-| Cache | Upstash Redis | $10 | 1GB memory |
-| Edge Computing | Cloudflare Workers | $5 | 10M requests |
-| AI Inference | Ollama (local) | $0 | Free, self-hosted |
-| Embeddings | BAAI (local) | $0 | Free, self-hosted |
-| OCR | Tesseract (local) | $0 | Free |
-| Formula OCR | MathPix | $20 | 1000 requests |
-| Handwriting OCR | Google Vision | $30 | 5000 pages |
-| Backup | Telegram / R2 Glacier | $5 | Cold storage |
-| **Total** | | **$110** | |
+### 13.1 Backup Strategy
 
-**Pro tier (cloud AI):** +$50/month for OpenAI API + vLLM GPU ($200/month shared across users)
+| Component | Frequency | Retention | Location | Method |
+|-----------|-----------|-----------|----------|--------|
+| PostgreSQL | Daily | 7 days | Cross-region R2 | pg_dump |
+| PostgreSQL | Hourly | 24 hours | Same region | WAL archiving |
+| R2 Documents | Real-time | 30 days | Cross-region R2 | Replication |
+| Redis | Daily | 7 days | R2 | RDB snapshot |
+| Telegram | On upload | Unlimited | Telegram | Bot API |
+
+### 13.2 Recovery Objectives
+
+| Objective | Target | Measurement |
+|-----------|--------|-------------|
+| RPO (Recovery Point Objective) | < 1 hour | Max data loss |
+| RTO (Recovery Time Objective) | < 4 hours | Max downtime |
+| Database restore | < 2 hours | From latest backup |
+| Document restore | < 1 hour | From R2 cross-region |
+| Telegram recovery | < 24 hours | Manual admin process |
+
+### 13.3 Runbooks
+
+| Scenario | Runbook | Link |
+|----------|---------|------|
+| PostgreSQL primary failure | Failover to read replica | `runbooks/db-failover.md` |
+| R2 outage | Switch to S3 fallback | `runbooks/r2-outage.md` |
+| LLM service down | Enable OpenAI fallback | `runbooks/llm-failover.md` |
+| DDoS attack | Enable Cloudflare WAF rules | `runbooks/ddos-response.md` |
+| Data breach | Incident response plan | `runbooks/security-incident.md` |
+| Telegram backup recovery | Manual recovery process | `runbooks/telegram-recovery.md` |
+
+---
+
+## 14. Cross-Document Traceability
+
+| Engineering Section | PRD | ADR | AI Dev Spec | Test Spec |
+|---------------------|-----|-----|-------------|-----------|
+| 2.1 Upload Service | FR-01 | — | E-015 | 3.7, 10 |
+| 2.2 Validation | FR-02 | — | E-016 | 3.8, 8.1 |
+| 2.3 OCR | FR-03 | ADR-015 | E-017 | 3.9, 9.2 |
+| 2.4 Parsing | FR-04 | ADR-001 | E-018 | 3.10, 9.3 |
+| 2.5 Extraction | FR-07 | — | E-019 | 3.5, 9.6 |
+| 2.6 Chunking | FR-05 | ADR-011 | E-019 | 3.12, 9.4 |
+| 2.7 Embedding | FR-06 | ADR-016 | E-020 | 3.11, 9.5 |
+| 2.8 Knowledge Graph | FR-08 | ADR-012 | E-021 | 3.20, 9.6 |
+| 2.9 Hybrid Retrieval | FR-09 | ADR-009 | E-022 | 3.13, 3.14, 9.1 |
+| 2.10 Citation | FR-12 | ADR-018 | E-024 | 3.17, 9.8 |
+| 3.3 Auto-Setup | FR-13 | — | E-023 | 3.21, 10 |
+| 5 Security | 12 | — | E-014 | 8 |
+| 6 Storage | 6 | ADR-010 | E-014 | 3.10 |
+| 7 Pipeline | 4, 8 | — | E-019 | 3.5, 9.6 |
+| 11 Monitoring | 13 | — | E-026 | 6, 7 |
+| 12 Error Handling | 6 | — | E-026 | 6.3 |
+| 13 Disaster Recovery | 6 | ADR-014 | — | 6.3, 9.9 |
 
 ---
 

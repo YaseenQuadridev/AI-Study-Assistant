@@ -1,9 +1,5 @@
-"""knowledge/__init__.py"""
-from __future__ import annotations
-
-from .document_parser import parse_document
-from .semantic_chunker import SemanticChunker
+from .graph_service import KnowledgeGraphService, KnowledgeGraph, GraphNode, GraphEdge
 from .vector_store import VectorStore
+from .semantic_chunker import SemanticChunker
+from .document_parser import parse_document
 from .knowledge_layer import KnowledgeLayer
-
-__all__ = ["parse_document", "SemanticChunker", "VectorStore", "KnowledgeLayer"]

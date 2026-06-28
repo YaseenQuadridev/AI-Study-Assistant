@@ -1,12 +1,59 @@
-Flask==3.0.3
-flask-cors==4.0.1
-streamlit==1.38.0
-numpy==1.26.4
-pandas==2.2.2
-faiss-cpu==1.8.0
-docling==2.1.0
-sentence-transformers==3.0.1
-requests==2.32.3
-ollama==0.3.0
-kokoro==0.3.0
-soundfile==0.12.1
+# Core
+requests>=2.31.0
+python-dotenv>=1.0.0
+numpy>=1.26.0
+pillow>=10.0.0
+
+# AI/ML
+sentence-transformers>=2.2.0
+transformers>=4.35.0
+ollama>=0.1.0
+openai>=1.0.0
+
+# Document Processing
+docling>=1.0.0
+PyPDF2>=3.0.0
+python-docx>=1.1.0
+python-pptx>=0.6.0
+ebooklib>=0.18.0
+
+# OCR
+pytesseract>=0.3.10
+pdf2image>=1.16.0
+
+# Database
+psycopg2-binary>=2.9.0
+supabase>=2.0.0
+pgvector>=0.2.0
+
+# Vector Search
+faiss-cpu>=1.7.0
+
+# Validation
+chardet>=5.0.0
+langdetect>=1.0.9
+python-magic>=0.4.0
+
+# Web
+beautifulsoup4>=4.12.0
+duckduckgo-search>=3.9.0
+
+# Monitoring
+opentelemetry-api>=1.20.0
+opentelemetry-sdk>=1.20.0
+opentelemetry-exporter-jaeger>=1.20.0
+sentry-sdk>=1.39.0
+
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-asyncio>=0.21.0
+requests-mock>=1.11.0
+
+# Audio
+kokoro>=0.3.0
+soundfile>=0.12.0
+
+# Security
+cryptography>=41.0.0
+pikepdf>=8.0.0
